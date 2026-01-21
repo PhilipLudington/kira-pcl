@@ -1,0 +1,364 @@
+/// Working Parser Combinator Demo
+/// Uses recursion instead of mutable loops (Kira limitation)
+
+// =============================================================================
+// Core Types
+// =============================================================================
+
+type ParseResult[T] =
+    | Success { value: T, remaining: List[char] }
+    | Failure { message: string }
+
+type Parser[T] = fn(List[char]) -> ParseResult[T]
+
+// =============================================================================
+// List Helpers (using recursion)
+// =============================================================================
+
+let reverse_chars: fn(List[char]) -> List[char] = fn(list: List[char]) -> List[char] {
+    return reverse_chars_acc(list, Nil)
+}
+
+let reverse_chars_acc: fn(List[char], List[char]) -> List[char] = fn(list: List[char], acc: List[char]) -> List[char] {
+    match list {
+        Nil => { return acc }
+        Cons(head, tail) => { return reverse_chars_acc(tail, Cons(head, acc)) }
+    }
+}
+
+let list_length_chars: fn(List[char]) -> i32 = fn(list: List[char]) -> i32 {
+    match list {
+        Nil => { return 0 }
+        Cons(_, tail) => { return 1 + list_length_chars(tail) }
+    }
+}
+
+let chars_to_string: fn(List[char]) -> string = fn(chars: List[char]) -> string {
+    match chars {
+        Nil => { return "" }
+        Cons(c, rest) => { return to_string(c) + chars_to_string(rest) }
+    }
+}
+
+// =============================================================================
+// Basic Parsers
+// =============================================================================
+
+/// Parse any single character
+let any_char: fn() -> Parser[char] = fn() -> Parser[char] {
+    return fn(input: List[char]) -> ParseResult[char] {
+        match input {
+            Nil => {
+                return Failure { message: "unexpected end of input" }
+            }
+            Cons(c, rest) => {
+                return Success { value: c, remaining: rest }
+            }
+        }
+    }
+}
+
+/// Parse a specific character
+let char_p: fn(char) -> Parser[char] = fn(expected: char) -> Parser[char] {
+    return fn(input: List[char]) -> ParseResult[char] {
+        match input {
+            Nil => {
+                return Failure { message: "unexpected end of input, expected '" + to_string(expected) + "'" }
+            }
+            Cons(c, rest) => {
+                if c == expected {
+                    return Success { value: c, remaining: rest }
+                }
+                return Failure { message: "expected '" + to_string(expected) + "', got '" + to_string(c) + "'" }
+            }
+        }
+    }
+}
+
+/// Parser that always succeeds with given value
+let pure[T]: fn(T) -> Parser[T] = fn(value: T) -> Parser[T] {
+    return fn(input: List[char]) -> ParseResult[T] {
+        return Success { value: value, remaining: input }
+    }
+}
+
+/// Parser that always fails
+let fail[T]: fn(string) -> Parser[T] = fn(message: string) -> Parser[T] {
+    return fn(input: List[char]) -> ParseResult[T] {
+        return Failure { message: message }
+    }
+}
+
+// =============================================================================
+// Combinators
+// =============================================================================
+
+/// Sequence two parsers (monadic bind)
+let and_then[A, B]: fn(Parser[A], fn(A) -> Parser[B]) -> Parser[B] = fn(pa: Parser[A], f: fn(A) -> Parser[B]) -> Parser[B] {
+    return fn(input: List[char]) -> ParseResult[B] {
+        match pa(input) {
+            Failure { message: m } => { return Failure { message: m } }
+            Success { value: a, remaining: rest } => {
+                let pb: Parser[B] = f(a)
+                return pb(rest)
+            }
+        }
+    }
+}
+
+/// Try first parser, then second if it fails
+let or_else[T]: fn(Parser[T], Parser[T]) -> Parser[T] = fn(p1: Parser[T], p2: Parser[T]) -> Parser[T] {
+    return fn(input: List[char]) -> ParseResult[T] {
+        match p1(input) {
+            Success { value: v, remaining: r } => {
+                return Success { value: v, remaining: r }
+            }
+            Failure { message: _ } => {
+                return p2(input)
+            }
+        }
+    }
+}
+
+/// Transform parser result (functor map)
+let map[A, B]: fn(Parser[A], fn(A) -> B) -> Parser[B] = fn(parser: Parser[A], f: fn(A) -> B) -> Parser[B] {
+    return fn(input: List[char]) -> ParseResult[B] {
+        match parser(input) {
+            Failure { message: m } => { return Failure { message: m } }
+            Success { value: a, remaining: rest } => {
+                return Success { value: f(a), remaining: rest }
+            }
+        }
+    }
+}
+
+/// Parse zero or more (using recursion)
+let many[T]: fn(Parser[T]) -> Parser[List[T]] = fn(parser: Parser[T]) -> Parser[List[T]] {
+    return fn(input: List[char]) -> ParseResult[List[T]] {
+        return many_acc[T](parser, input, Nil)
+    }
+}
+
+let many_acc[T]: fn(Parser[T], List[char], List[T]) -> ParseResult[List[T]] = fn(parser: Parser[T], input: List[char], acc: List[T]) -> ParseResult[List[T]] {
+    match parser(input) {
+        Failure { message: _ } => {
+            return Success { value: reverse_list[T](acc), remaining: input }
+        }
+        Success { value: v, remaining: rest } => {
+            return many_acc[T](parser, rest, Cons(v, acc))
+        }
+    }
+}
+
+let reverse_list[T]: fn(List[T]) -> List[T] = fn(list: List[T]) -> List[T] {
+    return reverse_list_acc[T](list, Nil)
+}
+
+let reverse_list_acc[T]: fn(List[T], List[T]) -> List[T] = fn(list: List[T], acc: List[T]) -> List[T] {
+    match list {
+        Nil => { return acc }
+        Cons(head, tail) => { return reverse_list_acc[T](tail, Cons(head, acc)) }
+    }
+}
+
+/// Parse one or more
+let many1[T]: fn(Parser[T]) -> Parser[List[T]] = fn(parser: Parser[T]) -> Parser[List[T]] {
+    return and_then[T, List[T]](parser, fn(first: T) -> Parser[List[T]] {
+        return map[List[T], List[T]](many[T](parser), fn(rest: List[T]) -> List[T] {
+            return Cons(first, rest)
+        })
+    })
+}
+
+// =============================================================================
+// Character Class Parsers
+// =============================================================================
+
+let is_digit: fn(char) -> bool = fn(c: char) -> bool {
+    return c >= '0' and c <= '9'
+}
+
+let is_letter: fn(char) -> bool = fn(c: char) -> bool {
+    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z')
+}
+
+let is_whitespace: fn(char) -> bool = fn(c: char) -> bool {
+    return c == ' ' or c == '\t' or c == '\n' or c == '\r'
+}
+
+let satisfy: fn(fn(char) -> bool, string) -> Parser[char] = fn(pred: fn(char) -> bool, desc: string) -> Parser[char] {
+    return fn(input: List[char]) -> ParseResult[char] {
+        match input {
+            Nil => {
+                return Failure { message: "unexpected end of input, expected " + desc }
+            }
+            Cons(c, rest) => {
+                if pred(c) {
+                    return Success { value: c, remaining: rest }
+                }
+                return Failure { message: "expected " + desc + ", got '" + to_string(c) + "'" }
+            }
+        }
+    }
+}
+
+let digit: fn() -> Parser[char] = fn() -> Parser[char] {
+    return satisfy(is_digit, "digit")
+}
+
+let letter: fn() -> Parser[char] = fn() -> Parser[char] {
+    return satisfy(is_letter, "letter")
+}
+
+let whitespace: fn() -> Parser[char] = fn() -> Parser[char] {
+    return satisfy(is_whitespace, "whitespace")
+}
+
+// =============================================================================
+// String Conversion (using effect for iteration)
+// =============================================================================
+
+effect fn string_to_chars(s: string) -> IO[List[char]] {
+    return string_to_chars_loop(s, Nil)
+}
+
+effect fn string_to_chars_loop(s: string, acc: List[char]) -> IO[List[char]] {
+    // Use for loop to iterate, accumulate reversed, then reverse
+    var result: List[char] = acc
+    for c in s {
+        result = Cons(c, result)
+    }
+    return reverse_chars(result)
+}
+
+// =============================================================================
+// Main Demo
+// =============================================================================
+
+effect fn main() -> IO[void] {
+    println("Parser Combinator Library Demo")
+    println("==============================")
+    println("")
+
+    // Convert test strings to char lists
+    let hello: List[char] = string_to_chars("Hello")
+    let digits_abc: List[char] = string_to_chars("123abc")
+    let abc: List[char] = string_to_chars("abc")
+    let foo123: List[char] = string_to_chars("foo123 bar")
+    let spaces: List[char] = string_to_chars("   hello")
+
+    // Test 1: Parse single character
+    println("Test 1: Parse 'H' from \"Hello\"")
+    let result1: ParseResult[char] = char_p('H')(hello)
+    print_char_result(result1)
+    println("")
+
+    // Test 2: Parse fails on wrong character
+    println("Test 2: Parse 'X' from \"Hello\" (should fail)")
+    let result2: ParseResult[char] = char_p('X')(hello)
+    print_char_result(result2)
+    println("")
+
+    // Test 3: Parse multiple characters with and_then
+    println("Test 3: Parse \"He\" using and_then")
+    let he_parser: Parser[(char, char)] = and_then[char, (char, char)](char_p('H'), fn(h: char) -> Parser[(char, char)] {
+        return map[char, (char, char)](char_p('e'), fn(e: char) -> (char, char) {
+            return (h, e)
+        })
+    })
+    let result3: ParseResult[(char, char)] = he_parser(hello)
+    match result3 {
+        Success { value: pair, remaining: _ } => {
+            let (c1, c2): (char, char) = pair
+            println("  Success: parsed '" + to_string(c1) + to_string(c2) + "'")
+        }
+        Failure { message: m } => {
+            println("  Failure: " + m)
+        }
+    }
+    println("")
+
+    // Test 4: Parse with or_else
+    println("Test 4: Parse 'a' or 'H' from \"Hello\"")
+    let a_or_h: Parser[char] = or_else[char](char_p('a'), char_p('H'))
+    let result4: ParseResult[char] = a_or_h(hello)
+    print_char_result(result4)
+    println("")
+
+    // Test 5: Parse many digits
+    println("Test 5: Parse digits from \"123abc\"")
+    let result5: ParseResult[List[char]] = many[char](digit())(digits_abc)
+    match result5 {
+        Success { value: chars, remaining: rest } => {
+            println("  Success: parsed " + to_string(list_length_chars(chars)) + " digits: \"" + chars_to_string(chars) + "\"")
+            println("  Remaining: " + to_string(list_length_chars(rest)) + " chars")
+        }
+        Failure { message: m } => {
+            println("  Failure: " + m)
+        }
+    }
+    println("")
+
+    // Test 6: Parse many1 requires at least one
+    println("Test 6: Parse many1 digits from \"abc\" (should fail)")
+    let result6: ParseResult[List[char]] = many1[char](digit())(abc)
+    match result6 {
+        Success { value: chars, remaining: _ } => {
+            println("  Success: parsed " + to_string(list_length_chars(chars)) + " digits")
+        }
+        Failure { message: m } => {
+            println("  Failure: " + m)
+        }
+    }
+    println("")
+
+    // Test 7: Parse identifier (letter followed by letters/digits)
+    println("Test 7: Parse identifier from \"foo123 bar\"")
+    let ident_parser: Parser[string] = and_then[char, string](letter(), fn(first: char) -> Parser[string] {
+        let rest_char: Parser[char] = or_else[char](letter(), digit())
+        return map[List[char], string](many[char](rest_char), fn(rest: List[char]) -> string {
+            return to_string(first) + chars_to_string(rest)
+        })
+    })
+    let result7: ParseResult[string] = ident_parser(foo123)
+    match result7 {
+        Success { value: id, remaining: rest } => {
+            println("  Success: parsed identifier \"" + id + "\"")
+            println("  Remaining: " + to_string(list_length_chars(rest)) + " chars")
+        }
+        Failure { message: m } => {
+            println("  Failure: " + m)
+        }
+    }
+    println("")
+
+    // Test 8: Skip whitespace
+    println("Test 8: Skip whitespace from \"   hello\"")
+    let skip_ws: Parser[List[char]] = many[char](whitespace())
+    let result8: ParseResult[List[char]] = skip_ws(spaces)
+    match result8 {
+        Success { value: ws, remaining: rest } => {
+            println("  Success: skipped " + to_string(list_length_chars(ws)) + " whitespace chars")
+            println("  Remaining: " + to_string(list_length_chars(rest)) + " chars")
+        }
+        Failure { message: m } => {
+            println("  Failure: " + m)
+        }
+    }
+    println("")
+
+    println("Demo complete!")
+    return
+}
+
+effect fn print_char_result(result: ParseResult[char]) -> IO[void] {
+    match result {
+        Success { value: c, remaining: _ } => {
+            println("  Success: parsed '" + to_string(c) + "'")
+        }
+        Failure { message: m } => {
+            println("  Failure: " + m)
+        }
+    }
+    return
+}
