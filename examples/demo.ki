@@ -1,0 +1,465 @@
+/// Parser Combinator Library Demo
+///
+/// This file demonstrates the PCL in action with several practical examples.
+
+import src.types
+import src.primitives
+import src.combinators
+import src.lexer
+import src.expr
+import examples.json
+import examples.calc
+
+// =============================================================================
+// Example 1: Simple Parsers
+// =============================================================================
+
+/// Parse a greeting like "Hello, World!"
+let greeting_parser: fn() -> Parser[string] = fn() -> Parser[string] {
+    return map3[string, string, string, string](
+        string_p("Hello, "),
+        map[List[char], string](many1[char](letter()), chars_to_string),
+        string_p("!"),
+        fn(hello: string, name: string, bang: string) -> string {
+            return name
+        }
+    )
+}
+
+effect fn demo_simple_parsers() -> IO[void] {
+    std.io.println("=== Simple Parsers ===")
+    std.io.println("")
+
+    // Parse a single character
+    let char_result: Result[char, ParseError] = parse[char](char_p('H'), "Hello")
+    match char_result {
+        Ok(c) => { std.io.println("Parsed char: " + char_to_string(c)) }
+        Err(_) => { std.io.println("Failed to parse char") }
+    }
+
+    // Parse a greeting
+    let greet_result: Result[string, ParseError] = parse[string](greeting_parser(), "Hello, World!")
+    match greet_result {
+        Ok(name) => { std.io.println("Greeted: " + name) }
+        Err(_) => { std.io.println("Failed to parse greeting") }
+    }
+
+    // Parse digits
+    let digits: Parser[string] = map[List[char], string](many1[char](digit()), chars_to_string)
+    let num_result: Result[string, ParseError] = parse[string](digits, "12345abc")
+    match num_result {
+        Ok(s) => { std.io.println("Parsed digits: " + s) }
+        Err(_) => { std.io.println("Failed to parse digits") }
+    }
+
+    std.io.println("")
+    return
+}
+
+// =============================================================================
+// Example 2: Combinator Composition
+// =============================================================================
+
+/// Parse a key=value pair
+let key_value_parser: fn() -> Parser[(string, string)] = fn() -> Parser[(string, string)] {
+    let key: Parser[string] = map[List[char], string](many1[char](letter()), chars_to_string)
+    let value: Parser[string] = map[List[char], string](many1[char](alphanumeric()), chars_to_string)
+    return map3[string, char, string, (string, string)](
+        key,
+        char_p('='),
+        value,
+        fn(k: string, _: char, v: string) -> (string, string) {
+            return (k, v)
+        }
+    )
+}
+
+/// Parse multiple key=value pairs separated by semicolons
+let config_parser: fn() -> Parser[List[(string, string)]] = fn() -> Parser[List[(string, string)]] {
+    return sep_by[(string, string), char](key_value_parser(), char_p(';'))
+}
+
+effect fn demo_combinators() -> IO[void] {
+    std.io.println("=== Combinator Composition ===")
+    std.io.println("")
+
+    // Parse a single key-value
+    let kv_result: Result[(string, string), ParseError] = parse[(string, string)](
+        key_value_parser(),
+        "name=Alice"
+    )
+    match kv_result {
+        Ok(pair) => {
+            let (k, v): (string, string) = pair
+            std.io.println("Key: " + k + ", Value: " + v)
+        }
+        Err(_) => { std.io.println("Failed to parse key-value") }
+    }
+
+    // Parse multiple key-values
+    let config_result: Result[List[(string, string)], ParseError] = parse[List[(string, string)]](
+        config_parser(),
+        "name=Alice;age=30;city=NYC"
+    )
+    match config_result {
+        Ok(pairs) => {
+            std.io.println("Parsed " + std.i32.to_string(length[(string, string)](pairs)) + " config pairs")
+        }
+        Err(_) => { std.io.println("Failed to parse config") }
+    }
+
+    // Using choice for alternatives
+    let bool_parser: Parser[bool] = or_else[bool](
+        replace[string, bool](string_p("true"), true),
+        replace[string, bool](string_p("false"), false)
+    )
+    let bool_result: Result[bool, ParseError] = parse[bool](bool_parser, "true")
+    match bool_result {
+        Ok(b) => {
+            if b {
+                std.io.println("Parsed boolean: true")
+            } else {
+                std.io.println("Parsed boolean: false")
+            }
+        }
+        Err(_) => { std.io.println("Failed to parse boolean") }
+    }
+
+    std.io.println("")
+    return
+}
+
+// =============================================================================
+// Example 3: Lexer-based Parsing
+// =============================================================================
+
+/// Simple variable declaration: let name = value;
+type VarDecl = {
+    name: string,
+    value: i64
+}
+
+let var_decl_parser: fn() -> Parser[VarDecl] = fn() -> Parser[VarDecl] {
+    return map3[string, string, i64, VarDecl](
+        seq_right[string, string](keyword("let"), identifier()),
+        symbol("="),
+        seq_left[i64, string](integer(), symbol(";")),
+        fn(name: string, _: string, value: i64) -> VarDecl {
+            return VarDecl { name: name, value: value }
+        }
+    )
+}
+
+effect fn demo_lexer() -> IO[void] {
+    std.io.println("=== Lexer-based Parsing ===")
+    std.io.println("")
+
+    // Parse identifier
+    let id_result: Result[string, ParseError] = parse[string](identifier(), "myVariable ")
+    match id_result {
+        Ok(id) => { std.io.println("Identifier: " + id) }
+        Err(_) => { std.io.println("Failed to parse identifier") }
+    }
+
+    // Parse integer
+    let int_result: Result[i64, ParseError] = parse[i64](integer(), "42 ")
+    match int_result {
+        Ok(n) => { std.io.println("Integer: " + std.i64.to_string(n)) }
+        Err(_) => { std.io.println("Failed to parse integer") }
+    }
+
+    // Parse string literal
+    let str_result: Result[string, ParseError] = parse[string](string_literal(), "\"hello world\" ")
+    match str_result {
+        Ok(s) => { std.io.println("String: " + s) }
+        Err(_) => { std.io.println("Failed to parse string") }
+    }
+
+    // Parse variable declaration
+    let decl_result: Result[VarDecl, ParseError] = parse[VarDecl](
+        var_decl_parser(),
+        "let count = 100 ;"
+    )
+    match decl_result {
+        Ok(decl) => {
+            std.io.println("Variable: " + decl.name + " = " + std.i64.to_string(decl.value))
+        }
+        Err(_) => { std.io.println("Failed to parse declaration") }
+    }
+
+    std.io.println("")
+    return
+}
+
+// =============================================================================
+// Example 4: JSON Parsing
+// =============================================================================
+
+effect fn demo_json() -> IO[void] {
+    std.io.println("=== JSON Parsing ===")
+    std.io.println("")
+
+    // Simple values
+    let null_result: Result[JsonValue, ParseError] = parse_json("null")
+    match null_result {
+        Ok(_) => { std.io.println("Parsed: null") }
+        Err(_) => { std.io.println("Failed") }
+    }
+
+    let bool_result: Result[JsonValue, ParseError] = parse_json("true")
+    match bool_result {
+        Ok(v) => { std.io.println("Parsed: " + json_to_string(v)) }
+        Err(_) => { std.io.println("Failed") }
+    }
+
+    let num_result: Result[JsonValue, ParseError] = parse_json("42")
+    match num_result {
+        Ok(v) => { std.io.println("Parsed: " + json_to_string(v)) }
+        Err(_) => { std.io.println("Failed") }
+    }
+
+    // Array
+    let arr_result: Result[JsonValue, ParseError] = parse_json("[1, 2, 3, \"hello\"]")
+    match arr_result {
+        Ok(v) => { std.io.println("Parsed array: " + json_to_string(v)) }
+        Err(_) => { std.io.println("Failed") }
+    }
+
+    // Object
+    let obj_result: Result[JsonValue, ParseError] = parse_json("{\"name\": \"Alice\", \"age\": 30}")
+    match obj_result {
+        Ok(v) => {
+            std.io.println("Parsed object: " + json_to_string(v))
+            // Access fields
+            match json_get(v, "name") {
+                Some(name_val) => {
+                    match json_as_string(name_val) {
+                        Some(name) => { std.io.println("  name = " + name) }
+                        None => {}
+                    }
+                }
+                None => {}
+            }
+        }
+        Err(_) => { std.io.println("Failed") }
+    }
+
+    // Complex nested JSON
+    let complex_json: string = "{\"users\": [{\"id\": 1, \"name\": \"Alice\"}, {\"id\": 2, \"name\": \"Bob\"}]}"
+    let complex_result: Result[JsonValue, ParseError] = parse_json(complex_json)
+    match complex_result {
+        Ok(v) => { std.io.println("Parsed complex JSON successfully") }
+        Err(e) => { std.io.println("Failed: " + format_parse_error(e)) }
+    }
+
+    std.io.println("")
+    return
+}
+
+// =============================================================================
+// Example 5: Calculator
+// =============================================================================
+
+effect fn demo_calculator() -> IO[void] {
+    std.io.println("=== Calculator ===")
+    std.io.println("")
+
+    // Simple expressions
+    let expressions: List[string] = Cons(
+        "42",
+        Cons(
+            "1 + 2",
+            Cons(
+                "10 - 3",
+                Cons(
+                    "6 * 7",
+                    Cons(
+                        "100 / 4",
+                        Cons(
+                            "2 + 3 * 4",
+                            Cons(
+                                "(2 + 3) * 4",
+                                Cons(
+                                    "10 - 5 - 2",
+                                    Cons(
+                                        "-5 + 10",
+                                        Cons(
+                                            "((1 + 2) * (3 + 4))",
+                                            Nil
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+    eval_all(expressions)
+    std.io.println("")
+    return
+}
+
+effect fn eval_all(exprs: List[string]) -> IO[void] {
+    match exprs {
+        Nil => { return }
+        Cons(expr_str, rest) => {
+            match calculate(expr_str) {
+                Ok(result) => {
+                    std.io.println(expr_str + " = " + std.i64.to_string(result))
+                }
+                Err(e) => {
+                    std.io.println(expr_str + " => Error: " + format_parse_error(e))
+                }
+            }
+            eval_all(rest)
+            return
+        }
+    }
+}
+
+// =============================================================================
+// Example 6: Error Handling
+// =============================================================================
+
+effect fn demo_errors() -> IO[void] {
+    std.io.println("=== Error Handling ===")
+    std.io.println("")
+
+    // Parsing error
+    let bad_json: Result[JsonValue, ParseError] = parse_json("{invalid}")
+    match bad_json {
+        Ok(_) => { std.io.println("Unexpected success") }
+        Err(e) => { std.io.println("JSON error: " + format_parse_error(e)) }
+    }
+
+    // Calculator error
+    let bad_expr: Result[i64, ParseError] = calculate("1 + + 2")
+    match bad_expr {
+        Ok(_) => { std.io.println("Unexpected success") }
+        Err(e) => { std.io.println("Calc error: " + format_parse_error(e)) }
+    }
+
+    // Using labeled parsers for better errors
+    let labeled_int: Parser[i64] = label[i64](integer(), "integer literal")
+    let labeled_result: Result[i64, ParseError] = parse[i64](labeled_int, "abc")
+    match labeled_result {
+        Ok(_) => { std.io.println("Unexpected success") }
+        Err(e) => { std.io.println("Labeled error: " + format_parse_error(e)) }
+    }
+
+    std.io.println("")
+    return
+}
+
+// =============================================================================
+// Example 7: Building a Mini Language Parser
+// =============================================================================
+
+/// Mini language AST
+type Statement =
+    | Print(string)
+    | Assign(string, i64)
+    | If(i64, Statement)
+
+/// Parse print statement: print "message";
+let print_stmt: fn() -> Parser[Statement] = fn() -> Parser[Statement] {
+    return map[string, Statement](
+        seq_left[string, string](
+            seq_right[string, string](keyword("print"), string_literal()),
+            symbol(";")
+        ),
+        fn(msg: string) -> Statement { return Print(msg) }
+    )
+}
+
+/// Parse assignment: let name = value;
+let assign_stmt: fn() -> Parser[Statement] = fn() -> Parser[Statement] {
+    return map2[string, i64, Statement](
+        seq_right[string, string](keyword("let"), identifier()),
+        seq_left[i64, string](seq_right[string, i64](symbol("="), integer()), symbol(";")),
+        fn(name: string, value: i64) -> Statement { return Assign(name, value) }
+    )
+}
+
+/// Parse statement
+let statement: fn() -> Parser[Statement] = fn() -> Parser[Statement] {
+    return choice[Statement](Cons(
+        print_stmt(),
+        Cons(
+            assign_stmt(),
+            Nil
+        )
+    ))
+}
+
+/// Parse program (list of statements)
+let program: fn() -> Parser[List[Statement]] = fn() -> Parser[List[Statement]] {
+    return many[Statement](statement())
+}
+
+effect fn demo_mini_language() -> IO[void] {
+    std.io.println("=== Mini Language Parser ===")
+    std.io.println("")
+
+    let code: string = "let x = 42; print \"hello\"; let y = 100;"
+
+    let prog_parser: Parser[List[Statement]] = seq_right[void, List[Statement]](
+        skip_ws(),
+        program()
+    )
+
+    let result: Result[List[Statement], ParseError] = parse[List[Statement]](prog_parser, code)
+    match result {
+        Ok(stmts) => {
+            std.io.println("Parsed " + std.i32.to_string(length[Statement](stmts)) + " statements:")
+            print_statements(stmts)
+        }
+        Err(e) => {
+            std.io.println("Parse error: " + format_parse_error(e))
+        }
+    }
+
+    std.io.println("")
+    return
+}
+
+effect fn print_statements(stmts: List[Statement]) -> IO[void] {
+    match stmts {
+        Nil => { return }
+        Cons(stmt, rest) => {
+            match stmt {
+                Print(msg) => { std.io.println("  print \"" + msg + "\"") }
+                Assign(name, value) => {
+                    std.io.println("  let " + name + " = " + std.i64.to_string(value))
+                }
+                If(cond, body) => { std.io.println("  if ...") }
+            }
+            print_statements(rest)
+            return
+        }
+    }
+}
+
+// =============================================================================
+// Main
+// =============================================================================
+
+effect fn main() -> IO[void] {
+    std.io.println("Parser Combinator Library Demo")
+    std.io.println("==============================")
+    std.io.println("")
+
+    demo_simple_parsers()
+    demo_combinators()
+    demo_lexer()
+    demo_json()
+    demo_calculator()
+    demo_errors()
+    demo_mini_language()
+
+    std.io.println("Demo complete!")
+    return
+}

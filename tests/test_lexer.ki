@@ -1,0 +1,460 @@
+/// Tests for the lexer module
+///
+/// Tests cover:
+/// - Whitespace handling
+/// - Token parsers (keyword, symbol, identifier, integer, string_literal)
+/// - Additional lexer utilities
+
+import src.types
+import src.primitives
+import src.combinators
+import src.lexer
+
+// =============================================================================
+// Whitespace Tests
+// =============================================================================
+
+let test_skip_ws_empty: fn() -> void = fn() -> void {
+    let parser: Parser[void] = skip_ws()
+    let result: ParseResult[void] = run[void](parser, "abc")
+    match result {
+        Success { value: _, remaining: rest } => {
+            assert(rest.pos.offset == 0, "should not consume non-whitespace")
+        }
+        Failure { error: _ } => {
+            assert(false, "skip_ws should never fail")
+        }
+    }
+    return
+}
+
+let test_skip_ws_spaces: fn() -> void = fn() -> void {
+    let parser: Parser[void] = skip_ws()
+    let result: ParseResult[void] = run[void](parser, "   abc")
+    match result {
+        Success { value: _, remaining: rest } => {
+            assert(rest.pos.offset == 3, "should skip 3 spaces")
+        }
+        Failure { error: _ } => {
+            assert(false, "skip_ws should never fail")
+        }
+    }
+    return
+}
+
+let test_skip_ws_mixed_whitespace: fn() -> void = fn() -> void {
+    let parser: Parser[void] = skip_ws()
+    let result: ParseResult[void] = run[void](parser, " \t\n abc")
+    match result {
+        Success { value: _, remaining: rest } => {
+            assert(rest.pos.offset == 4, "should skip mixed whitespace")
+        }
+        Failure { error: _ } => {
+            assert(false, "skip_ws should never fail")
+        }
+    }
+    return
+}
+
+let test_lexeme_strips_trailing_ws: fn() -> void = fn() -> void {
+    let parser: Parser[char] = lexeme[char](char_p('x'))
+    let result: ParseResult[char] = run[char](parser, "x   abc")
+    match result {
+        Success { value: c, remaining: rest } => {
+            assert(c == 'x', "should parse 'x'")
+            assert(rest.pos.offset == 4, "should consume 'x' and trailing spaces")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+// =============================================================================
+// Keyword Tests
+// =============================================================================
+
+let test_keyword_matches_word: fn() -> void = fn() -> void {
+    let parser: Parser[string] = keyword("if")
+    let result: ParseResult[string] = run[string](parser, "if (x)")
+    match result {
+        Success { value: s, remaining: _ } => {
+            assert(s == "if", "should parse 'if'")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_keyword_not_prefix: fn() -> void = fn() -> void {
+    let parser: Parser[string] = keyword("if")
+    let result: ParseResult[string] = run[string](parser, "iffy")
+    assert(is_failure[string](result), "should not match prefix of identifier")
+    return
+}
+
+let test_keyword_with_trailing_ws: fn() -> void = fn() -> void {
+    let parser: Parser[string] = keyword("while")
+    let result: ParseResult[string] = run[string](parser, "while   (")
+    match result {
+        Success { value: s, remaining: rest } => {
+            assert(s == "while", "should parse 'while'")
+            assert(rest.pos.offset == 8, "should consume keyword and trailing ws")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+// =============================================================================
+// Symbol Tests
+// =============================================================================
+
+let test_symbol_matches: fn() -> void = fn() -> void {
+    let parser: Parser[string] = symbol("+=")
+    let result: ParseResult[string] = run[string](parser, "+=  x")
+    match result {
+        Success { value: s, remaining: rest } => {
+            assert(s == "+=", "should parse '+='")
+            assert(rest.pos.offset == 4, "should consume symbol and ws")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_symbol_no_match: fn() -> void = fn() -> void {
+    let parser: Parser[string] = symbol("++")
+    let result: ParseResult[string] = run[string](parser, "+-")
+    assert(is_failure[string](result), "should fail on different symbol")
+    return
+}
+
+// =============================================================================
+// Identifier Tests
+// =============================================================================
+
+let test_identifier_simple: fn() -> void = fn() -> void {
+    let parser: Parser[string] = identifier()
+    let result: ParseResult[string] = run[string](parser, "foo bar")
+    match result {
+        Success { value: s, remaining: _ } => {
+            assert(s == "foo", "should parse 'foo'")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_identifier_with_numbers: fn() -> void = fn() -> void {
+    let parser: Parser[string] = identifier()
+    let result: ParseResult[string] = run[string](parser, "foo123 bar")
+    match result {
+        Success { value: s, remaining: _ } => {
+            assert(s == "foo123", "should parse 'foo123'")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_identifier_leading_number_fails: fn() -> void = fn() -> void {
+    let parser: Parser[string] = identifier()
+    let result: ParseResult[string] = run[string](parser, "123foo")
+    assert(is_failure[string](result), "identifier cannot start with digit")
+    return
+}
+
+let test_identifier_single_letter: fn() -> void = fn() -> void {
+    let parser: Parser[string] = identifier()
+    let result: ParseResult[string] = run[string](parser, "x ")
+    match result {
+        Success { value: s, remaining: _ } => {
+            assert(s == "x", "should parse 'x'")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+// =============================================================================
+// Integer Tests
+// =============================================================================
+
+let test_integer_positive: fn() -> void = fn() -> void {
+    let parser: Parser[i64] = integer()
+    let result: ParseResult[i64] = run[i64](parser, "42 ")
+    match result {
+        Success { value: n, remaining: _ } => {
+            assert(n == 42, "should parse 42")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_integer_multidigit: fn() -> void = fn() -> void {
+    let parser: Parser[i64] = integer()
+    let result: ParseResult[i64] = run[i64](parser, "123456 ")
+    match result {
+        Success { value: n, remaining: _ } => {
+            assert(n == 123456, "should parse 123456")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_integer_fails_on_letter: fn() -> void = fn() -> void {
+    let parser: Parser[i64] = integer()
+    let result: ParseResult[i64] = run[i64](parser, "abc")
+    assert(is_failure[i64](result), "should fail on non-digit")
+    return
+}
+
+let test_signed_integer_negative: fn() -> void = fn() -> void {
+    let parser: Parser[i64] = signed_integer()
+    let result: ParseResult[i64] = run[i64](parser, "-42 ")
+    match result {
+        Success { value: n, remaining: _ } => {
+            assert(n == -42, "should parse -42")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_signed_integer_positive_explicit: fn() -> void = fn() -> void {
+    let parser: Parser[i64] = signed_integer()
+    let result: ParseResult[i64] = run[i64](parser, "+42 ")
+    match result {
+        Success { value: n, remaining: _ } => {
+            assert(n == 42, "should parse +42 as 42")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+// =============================================================================
+// String Literal Tests
+// =============================================================================
+
+let test_string_literal_simple: fn() -> void = fn() -> void {
+    let parser: Parser[string] = string_literal()
+    let result: ParseResult[string] = run[string](parser, "\"hello\" ")
+    match result {
+        Success { value: s, remaining: _ } => {
+            assert(s == "hello", "should parse 'hello'")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_string_literal_escaped_chars: fn() -> void = fn() -> void {
+    let parser: Parser[string] = string_literal()
+    let result: ParseResult[string] = run[string](parser, "\"hello\\nworld\" ")
+    match result {
+        Success { value: s, remaining: _ } => {
+            assert(s == "hello\nworld", "should parse with newline escape")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_string_literal_escaped_quote: fn() -> void = fn() -> void {
+    let parser: Parser[string] = string_literal()
+    let result: ParseResult[string] = run[string](parser, "\"say \\\"hi\\\"\" ")
+    match result {
+        Success { value: s, remaining: _ } => {
+            assert(s == "say \"hi\"", "should parse with escaped quotes")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_string_literal_empty: fn() -> void = fn() -> void {
+    let parser: Parser[string] = string_literal()
+    let result: ParseResult[string] = run[string](parser, "\"\" ")
+    match result {
+        Success { value: s, remaining: _ } => {
+            assert(s == "", "should parse empty string")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_string_literal_unclosed: fn() -> void = fn() -> void {
+    let parser: Parser[string] = string_literal()
+    let result: ParseResult[string] = run[string](parser, "\"hello")
+    assert(is_failure[string](result), "should fail on unclosed string")
+    return
+}
+
+// =============================================================================
+// Utility Tests
+// =============================================================================
+
+let test_parens: fn() -> void = fn() -> void {
+    let parser: Parser[i64] = parens[i64](integer())
+    let result: ParseResult[i64] = run[i64](parser, "( 42 ) ")
+    match result {
+        Success { value: n, remaining: _ } => {
+            assert(n == 42, "should parse parenthesized 42")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_brackets: fn() -> void = fn() -> void {
+    let parser: Parser[i64] = brackets[i64](integer())
+    let result: ParseResult[i64] = run[i64](parser, "[ 42 ] ")
+    match result {
+        Success { value: n, remaining: _ } => {
+            assert(n == 42, "should parse bracketed 42")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_braces: fn() -> void = fn() -> void {
+    let parser: Parser[i64] = braces[i64](integer())
+    let result: ParseResult[i64] = run[i64](parser, "{ 42 } ")
+    match result {
+        Success { value: n, remaining: _ } => {
+            assert(n == 42, "should parse braced 42")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_comma_sep: fn() -> void = fn() -> void {
+    let parser: Parser[List[i64]] = comma_sep[i64](integer())
+    let result: ParseResult[List[i64]] = run[List[i64]](parser, "1, 2, 3 ")
+    match result {
+        Success { value: nums, remaining: _ } => {
+            assert(length[i64](nums) == 3, "should parse 3 numbers")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_comma_sep_empty: fn() -> void = fn() -> void {
+    let parser: Parser[List[i64]] = comma_sep[i64](integer())
+    let result: ParseResult[List[i64]] = run[List[i64]](parser, "abc")
+    match result {
+        Success { value: nums, remaining: _ } => {
+            assert(length[i64](nums) == 0, "should return empty list")
+        }
+        Failure { error: _ } => {
+            assert(false, "comma_sep should never fail")
+        }
+    }
+    return
+}
+
+let test_line_comment: fn() -> void = fn() -> void {
+    let parser: Parser[void] = line_comment("//")
+    let result: ParseResult[void] = run[void](parser, "// this is a comment\nnext line")
+    match result {
+        Success { value: _, remaining: rest } => {
+            // Should consume up to but not including the newline
+            assert(rest.pos.offset == 20, "should consume comment")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+// =============================================================================
+// Integration Tests
+// =============================================================================
+
+let test_parse_assignment: fn() -> void = fn() -> void {
+    // Parse: identifier = integer ;
+    let parser: Parser[(string, i64)] = map3[string, string, i64, (string, i64)](
+        identifier(),
+        symbol("="),
+        seq_left[i64, string](integer(), symbol(";")),
+        fn(name: string, _: string, value: i64) -> (string, i64) {
+            return (name, value)
+        }
+    )
+    let result: ParseResult[(string, i64)] = run[(string, i64)](parser, "x = 42 ;")
+    match result {
+        Success { value: pair, remaining: _ } => {
+            let (name, value): (string, i64) = pair
+            assert(name == "x", "name should be 'x'")
+            assert(value == 42, "value should be 42")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_parse_function_call: fn() -> void = fn() -> void {
+    // Parse: identifier ( args )
+    let args: Parser[List[i64]] = parens[List[i64]](comma_sep[i64](integer()))
+    let parser: Parser[(string, List[i64])] = seq_pair[string, List[i64]](identifier(), args)
+    let result: ParseResult[(string, List[i64])] = run[(string, List[i64])](parser, "foo ( 1, 2, 3 )")
+    match result {
+        Success { value: pair, remaining: _ } => {
+            let (name, nums): (string, List[i64]) = pair
+            assert(name == "foo", "name should be 'foo'")
+            assert(length[i64](nums) == 3, "should have 3 arguments")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}

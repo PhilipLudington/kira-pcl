@@ -1,0 +1,383 @@
+/// Tests for the primitives module
+///
+/// Tests cover:
+/// - Basic character parsers (any_char, char_p, satisfy)
+/// - Character class parsers (digit, letter, etc.)
+/// - String parsers (string_p, eof)
+/// - Pure parsers (pure, fail)
+/// - Parser execution (run, parse)
+
+import src.types
+import src.primitives
+
+// =============================================================================
+// any_char Tests
+// =============================================================================
+
+let test_any_char_success: fn() -> void = fn() -> void {
+    let parser: Parser[char] = any_char()
+    let result: ParseResult[char] = run[char](parser, "hello")
+    match result {
+        Success { value: c, remaining: rest } => {
+            assert(c == 'h', "should parse 'h'")
+            assert(rest.pos.offset == 1, "offset should advance")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_any_char_empty_input: fn() -> void = fn() -> void {
+    let parser: Parser[char] = any_char()
+    let result: ParseResult[char] = run[char](parser, "")
+    assert(is_failure[char](result), "should fail on empty input")
+    return
+}
+
+// =============================================================================
+// char_p Tests
+// =============================================================================
+
+let test_char_p_match: fn() -> void = fn() -> void {
+    let parser: Parser[char] = char_p('x')
+    let result: ParseResult[char] = run[char](parser, "xyz")
+    match result {
+        Success { value: c, remaining: rest } => {
+            assert(c == 'x', "should parse 'x'")
+            assert(rest.pos.offset == 1, "offset should advance")
+            assert(rest.pos.column == 2, "column should advance")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_char_p_no_match: fn() -> void = fn() -> void {
+    let parser: Parser[char] = char_p('x')
+    let result: ParseResult[char] = run[char](parser, "abc")
+    match result {
+        Success { value: _, remaining: _ } => {
+            assert(false, "should fail")
+        }
+        Failure { error: e } => {
+            assert(e.position.offset == 0, "error should be at start")
+            match e.actual {
+                Some(c) => { assert(c == 'a', "actual should be 'a'") }
+                None => { assert(false, "actual should be Some") }
+            }
+        }
+    }
+    return
+}
+
+let test_char_p_empty_input: fn() -> void = fn() -> void {
+    let parser: Parser[char] = char_p('x')
+    let result: ParseResult[char] = run[char](parser, "")
+    match result {
+        Success { value: _, remaining: _ } => {
+            assert(false, "should fail")
+        }
+        Failure { error: e } => {
+            match e.actual {
+                Some(_) => { assert(false, "actual should be None for empty") }
+                None => { return }
+            }
+        }
+    }
+}
+
+// =============================================================================
+// satisfy Tests
+// =============================================================================
+
+let test_satisfy_digit: fn() -> void = fn() -> void {
+    let parser: Parser[char] = satisfy(is_digit, "digit")
+    let result: ParseResult[char] = run[char](parser, "5abc")
+    match result {
+        Success { value: c, remaining: _ } => {
+            assert(c == '5', "should parse '5'")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_satisfy_custom_predicate: fn() -> void = fn() -> void {
+    let is_vowel: fn(char) -> bool = fn(c: char) -> bool {
+        return c == 'a' or c == 'e' or c == 'i' or c == 'o' or c == 'u'
+    }
+    let parser: Parser[char] = satisfy(is_vowel, "vowel")
+
+    let result1: ParseResult[char] = run[char](parser, "apple")
+    assert(is_success[char](result1), "should match 'a'")
+
+    let result2: ParseResult[char] = run[char](parser, "xyz")
+    assert(is_failure[char](result2), "should fail on 'x'")
+    return
+}
+
+// =============================================================================
+// Character Class Parser Tests
+// =============================================================================
+
+let test_digit_parses_digits: fn() -> void = fn() -> void {
+    let parser: Parser[char] = digit()
+
+    let result0: ParseResult[char] = run[char](parser, "0")
+    assert(is_success[char](result0), "should parse '0'")
+
+    let result9: ParseResult[char] = run[char](parser, "9")
+    assert(is_success[char](result9), "should parse '9'")
+
+    let result_letter: ParseResult[char] = run[char](parser, "a")
+    assert(is_failure[char](result_letter), "should fail on letter")
+    return
+}
+
+let test_letter_parses_letters: fn() -> void = fn() -> void {
+    let parser: Parser[char] = letter()
+
+    let result_lower: ParseResult[char] = run[char](parser, "a")
+    assert(is_success[char](result_lower), "should parse 'a'")
+
+    let result_upper: ParseResult[char] = run[char](parser, "Z")
+    assert(is_success[char](result_upper), "should parse 'Z'")
+
+    let result_digit: ParseResult[char] = run[char](parser, "5")
+    assert(is_failure[char](result_digit), "should fail on digit")
+    return
+}
+
+let test_alphanumeric: fn() -> void = fn() -> void {
+    let parser: Parser[char] = alphanumeric()
+
+    assert(is_success[char](run[char](parser, "a")), "should parse letter")
+    assert(is_success[char](run[char](parser, "5")), "should parse digit")
+    assert(is_failure[char](run[char](parser, "!")), "should fail on special char")
+    return
+}
+
+let test_whitespace: fn() -> void = fn() -> void {
+    let parser: Parser[char] = whitespace()
+
+    assert(is_success[char](run[char](parser, " ")), "should parse space")
+    assert(is_success[char](run[char](parser, "\t")), "should parse tab")
+    assert(is_success[char](run[char](parser, "\n")), "should parse newline")
+    assert(is_failure[char](run[char](parser, "a")), "should fail on letter")
+    return
+}
+
+let test_one_of_matches: fn() -> void = fn() -> void {
+    let parser: Parser[char] = one_of("aeiou")
+
+    assert(is_success[char](run[char](parser, "a")), "should match 'a'")
+    assert(is_success[char](run[char](parser, "e")), "should match 'e'")
+    assert(is_success[char](run[char](parser, "u")), "should match 'u'")
+    assert(is_failure[char](run[char](parser, "x")), "should fail on 'x'")
+    return
+}
+
+let test_none_of_excludes: fn() -> void = fn() -> void {
+    let parser: Parser[char] = none_of("aeiou")
+
+    assert(is_failure[char](run[char](parser, "a")), "should fail on 'a'")
+    assert(is_failure[char](run[char](parser, "e")), "should fail on 'e'")
+    assert(is_success[char](run[char](parser, "x")), "should match 'x'")
+    assert(is_success[char](run[char](parser, "z")), "should match 'z'")
+    return
+}
+
+// =============================================================================
+// string_p Tests
+// =============================================================================
+
+let test_string_p_exact_match: fn() -> void = fn() -> void {
+    let parser: Parser[string] = string_p("hello")
+    let result: ParseResult[string] = run[string](parser, "hello world")
+    match result {
+        Success { value: s, remaining: rest } => {
+            assert(s == "hello", "should parse 'hello'")
+            assert(rest.pos.offset == 5, "offset should advance by 5")
+        }
+        Failure { error: _ } => {
+            assert(false, "should succeed")
+        }
+    }
+    return
+}
+
+let test_string_p_partial_no_match: fn() -> void = fn() -> void {
+    let parser: Parser[string] = string_p("hello")
+    let result: ParseResult[string] = run[string](parser, "help me")
+    assert(is_failure[string](result), "should fail on partial match")
+    return
+}
+
+let test_string_p_empty_expected: fn() -> void = fn() -> void {
+    let parser: Parser[string] = string_p("")
+    let result: ParseResult[string] = run[string](parser, "anything")
+    match result {
+        Success { value: s, remaining: rest } => {
+            assert(s == "", "should parse empty string")
+            assert(rest.pos.offset == 0, "offset should not advance")
+        }
+        Failure { error: _ } => {
+            assert(false, "empty string should always succeed")
+        }
+    }
+    return
+}
+
+// =============================================================================
+// eof Tests
+// =============================================================================
+
+let test_eof_at_end: fn() -> void = fn() -> void {
+    let parser: Parser[void] = eof()
+    let result: ParseResult[void] = run[void](parser, "")
+    assert(is_success[void](result), "should succeed at end of input")
+    return
+}
+
+let test_eof_not_at_end: fn() -> void = fn() -> void {
+    let parser: Parser[void] = eof()
+    let result: ParseResult[void] = run[void](parser, "remaining")
+    match result {
+        Success { value: _, remaining: _ } => {
+            assert(false, "should fail when input remains")
+        }
+        Failure { error: e } => {
+            match e.actual {
+                Some(c) => { assert(c == 'r', "actual should show first remaining char") }
+                None => { assert(false, "actual should be Some") }
+            }
+        }
+    }
+    return
+}
+
+// =============================================================================
+// pure Tests
+// =============================================================================
+
+let test_pure_always_succeeds: fn() -> void = fn() -> void {
+    let parser: Parser[i32] = pure[i32](42)
+    let result: ParseResult[i32] = run[i32](parser, "anything")
+    match result {
+        Success { value: v, remaining: rest } => {
+            assert(v == 42, "value should be 42")
+            assert(rest.pos.offset == 0, "should not consume input")
+        }
+        Failure { error: _ } => {
+            assert(false, "pure should never fail")
+        }
+    }
+    return
+}
+
+let test_pure_on_empty: fn() -> void = fn() -> void {
+    let parser: Parser[string] = pure[string]("hello")
+    let result: ParseResult[string] = run[string](parser, "")
+    assert(is_success[string](result), "pure should succeed on empty input")
+    return
+}
+
+// =============================================================================
+// fail Tests
+// =============================================================================
+
+let test_fail_always_fails: fn() -> void = fn() -> void {
+    let parser: Parser[i32] = fail[i32]("expected something else")
+    let result: ParseResult[i32] = run[i32](parser, "anything")
+    match result {
+        Success { value: _, remaining: _ } => {
+            assert(false, "fail should never succeed")
+        }
+        Failure { error: e } => {
+            assert(e.position.offset == 0, "error should be at start")
+        }
+    }
+    return
+}
+
+// =============================================================================
+// run/parse Tests
+// =============================================================================
+
+let test_run_returns_parse_result: fn() -> void = fn() -> void {
+    let parser: Parser[char] = char_p('x')
+    let result: ParseResult[char] = run[char](parser, "xyz")
+    assert(is_success[char](result), "run should return success")
+    return
+}
+
+let test_parse_returns_result_ok: fn() -> void = fn() -> void {
+    let parser: Parser[char] = char_p('x')
+    let result: Result[char, ParseError] = parse[char](parser, "xyz")
+    match result {
+        Ok(c) => { assert(c == 'x', "should return 'x'") }
+        Err(_) => { assert(false, "should be Ok") }
+    }
+    return
+}
+
+let test_parse_returns_result_err: fn() -> void = fn() -> void {
+    let parser: Parser[char] = char_p('x')
+    let result: Result[char, ParseError] = parse[char](parser, "abc")
+    match result {
+        Ok(_) => { assert(false, "should be Err") }
+        Err(e) => { assert(e.position.offset == 0, "error should be at start") }
+    }
+    return
+}
+
+// =============================================================================
+// Position Tracking Tests
+// =============================================================================
+
+let test_position_advances_column: fn() -> void = fn() -> void {
+    let parser: Parser[char] = any_char()
+    let result1: ParseResult[char] = run[char](parser, "abc")
+    match result1 {
+        Success { value: _, remaining: rest1 } => {
+            let result2: ParseResult[char] = parser(rest1)
+            match result2 {
+                Success { value: _, remaining: rest2 } => {
+                    assert(rest2.pos.column == 3, "column should be 3")
+                    assert(rest2.pos.line == 1, "line should still be 1")
+                }
+                Failure { error: _ } => { assert(false, "should succeed") }
+            }
+        }
+        Failure { error: _ } => { assert(false, "should succeed") }
+    }
+    return
+}
+
+let test_position_advances_line_on_newline: fn() -> void = fn() -> void {
+    let parser: Parser[char] = any_char()
+    let input: Input = input_new("a\nb")
+
+    let result1: ParseResult[char] = parser(input)
+    match result1 {
+        Success { value: _, remaining: rest1 } => {
+            let result2: ParseResult[char] = parser(rest1)
+            match result2 {
+                Success { value: c, remaining: rest2 } => {
+                    assert(c == '\n', "should parse newline")
+                    assert(rest2.pos.line == 2, "line should be 2")
+                    assert(rest2.pos.column == 1, "column should reset to 1")
+                }
+                Failure { error: _ } => { assert(false, "should succeed") }
+            }
+        }
+        Failure { error: _ } => { assert(false, "should succeed") }
+    }
+    return
+}

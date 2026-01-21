@@ -1,0 +1,239 @@
+/// Lexer helpers for the Parser Combinator Library
+///
+/// This module provides token-level parsing utilities:
+/// - Whitespace handling (skip_ws, lexeme)
+/// - Token parsers (keyword, symbol, identifier, integer, string_literal)
+
+import src.types
+import src.primitives
+import src.combinators
+
+// =============================================================================
+// Whitespace Handling
+// =============================================================================
+
+/// Skip zero or more whitespace characters
+let skip_ws: fn() -> Parser[void] = fn() -> Parser[void] {
+    return replace[List[char], void](many[char](whitespace()), void)
+}
+
+/// Parse with trailing whitespace (lexeme combinator)
+let lexeme[T]: fn(Parser[T]) -> Parser[T] = fn(parser: Parser[T]) -> Parser[T] {
+    return seq_left[T, void](parser, skip_ws())
+}
+
+// =============================================================================
+// Token Parsers
+// =============================================================================
+
+/// Parse keyword (not followed by alphanumeric character)
+let keyword: fn(string) -> Parser[string] = fn(kw: string) -> Parser[string] {
+    return lexeme[string](seq_left[string, void](string_p(kw), not_followed_by[char](alphanumeric())))
+}
+
+/// Parse symbol with trailing whitespace
+let symbol: fn(string) -> Parser[string] = fn(sym: string) -> Parser[string] {
+    return lexeme[string](string_p(sym))
+}
+
+/// Parse identifier (letter followed by zero or more alphanumerics)
+let identifier: fn() -> Parser[string] = fn() -> Parser[string] {
+    return lexeme[string](
+        map2[char, List[char], string](
+            letter(),
+            many[char](alphanumeric()),
+            fn(first: char, rest: List[char]) -> string {
+                return chars_to_string(Cons(first, rest))
+            }
+        )
+    )
+}
+
+/// Parse integer literal (sequence of digits)
+let integer: fn() -> Parser[i64] = fn() -> Parser[i64] {
+    let digits: Parser[string] = map[List[char], string](
+        many1[char](digit()),
+        fn(chars: List[char]) -> string { return chars_to_string(chars) }
+    )
+    return lexeme[i64](map[string, i64](digits, string_to_i64))
+}
+
+/// Parse signed integer literal
+let signed_integer: fn() -> Parser[i64] = fn() -> Parser[i64] {
+    let sign: Parser[i64] = or_else[i64](
+        replace[char, i64](char_p('-'), -1),
+        replace[char, i64](char_p('+'), 1)
+    )
+    let opt_sign: Parser[i64] = or_else[i64](sign, pure[i64](1))
+    return lexeme[i64](
+        map2[i64, i64, i64](
+            opt_sign,
+            map[string, i64](
+                map[List[char], string](
+                    many1[char](digit()),
+                    fn(chars: List[char]) -> string { return chars_to_string(chars) }
+                ),
+                string_to_i64
+            ),
+            fn(s: i64, n: i64) -> i64 { return s * n }
+        )
+    )
+}
+
+/// Parse string literal with escape sequences
+let string_literal: fn() -> Parser[string] = fn() -> Parser[string] {
+    let quote: Parser[char] = char_p('"')
+
+    // Escape sequences
+    let escaped: Parser[char] = seq_right[char, char](
+        char_p('\\'),
+        choice[char](Cons(
+            replace[char, char](char_p('n'), '\n'),
+            Cons(
+                replace[char, char](char_p('t'), '\t'),
+                Cons(
+                    replace[char, char](char_p('r'), '\r'),
+                    Cons(
+                        replace[char, char](char_p('\\'), '\\'),
+                        Cons(
+                            replace[char, char](char_p('"'), '"'),
+                            Nil
+                        )
+                    )
+                )
+            )
+        ))
+    )
+
+    // Normal characters (not quote or backslash)
+    let normal: Parser[char] = satisfy(
+        fn(c: char) -> bool { return c != '"' and c != '\\' },
+        "string character"
+    )
+
+    // Either escaped or normal character
+    let char_content: Parser[char] = or_else[char](escaped, normal)
+
+    return lexeme[string](between[char, string, char](
+        quote,
+        map[List[char], string](many[char](char_content), chars_to_string),
+        quote
+    ))
+}
+
+// =============================================================================
+// Additional Lexer Utilities
+// =============================================================================
+
+/// Parse a floating point number (simple implementation)
+let float_literal: fn() -> Parser[f64] = fn() -> Parser[f64] {
+    let digits: Parser[string] = map[List[char], string](
+        many1[char](digit()),
+        fn(chars: List[char]) -> string { return chars_to_string(chars) }
+    )
+
+    // Optional sign
+    let sign: Parser[string] = or_else[string](
+        replace[char, string](char_p('-'), "-"),
+        pure[string]("")
+    )
+
+    // Integer part
+    let int_part: Parser[string] = digits
+
+    // Optional fractional part
+    let frac_part: Parser[string] = or_else[string](
+        map2[char, string, string](
+            char_p('.'),
+            digits,
+            fn(_: char, d: string) -> string { return std.string.concat(".", d) }
+        ),
+        pure[string]("")
+    )
+
+    return lexeme[f64](
+        map3[string, string, string, f64](
+            sign,
+            int_part,
+            frac_part,
+            fn(s: string, i: string, f: string) -> f64 {
+                let full: string = std.string.concat(s, std.string.concat(i, f))
+                return std.string.parse_f64(full)
+            }
+        )
+    )
+}
+
+/// Parse line comment (from delimiter to end of line)
+let line_comment: fn(string) -> Parser[void] = fn(start: string) -> Parser[void] {
+    let not_newline: fn(char) -> bool = fn(c: char) -> bool {
+        return c != '\n'
+    }
+    return replace[List[char], void](
+        seq_right[string, List[char]](
+            string_p(start),
+            many[char](satisfy(not_newline, "non-newline"))
+        ),
+        void
+    )
+}
+
+/// Skip whitespace and comments
+let skip_ws_and_comments: fn(string) -> Parser[void] =
+    fn(comment_start: string) -> Parser[void] {
+        let ws_or_comment: Parser[void] = or_else[void](
+            replace[char, void](whitespace(), void),
+            line_comment(comment_start)
+        )
+        return replace[List[void], void](many[void](ws_or_comment), void)
+    }
+
+/// Parse with leading and trailing whitespace stripped
+let token[T]: fn(Parser[T]) -> Parser[T] = fn(parser: Parser[T]) -> Parser[T] {
+    return seq_right[void, T](skip_ws(), lexeme[T](parser))
+}
+
+/// Parse a reserved word (keyword that's not a prefix of identifier)
+let reserved: fn(string) -> Parser[string] = fn(word: string) -> Parser[string] {
+    return label[string](keyword(word), word)
+}
+
+/// Parse an operator symbol
+let operator: fn(string) -> Parser[string] = fn(op: string) -> Parser[string] {
+    return label[string](symbol(op), op)
+}
+
+/// Parse parenthesized content
+let parens[T]: fn(Parser[T]) -> Parser[T] = fn(content: Parser[T]) -> Parser[T] {
+    return between[string, T, string](symbol("("), content, symbol(")"))
+}
+
+/// Parse bracketed content
+let brackets[T]: fn(Parser[T]) -> Parser[T] = fn(content: Parser[T]) -> Parser[T] {
+    return between[string, T, string](symbol("["), content, symbol("]"))
+}
+
+/// Parse braced content
+let braces[T]: fn(Parser[T]) -> Parser[T] = fn(content: Parser[T]) -> Parser[T] {
+    return between[string, T, string](symbol("{"), content, symbol("}"))
+}
+
+/// Parse comma-separated list
+let comma_sep[T]: fn(Parser[T]) -> Parser[List[T]] = fn(item: Parser[T]) -> Parser[List[T]] {
+    return sep_by[T, string](item, symbol(","))
+}
+
+/// Parse comma-separated list (at least one)
+let comma_sep1[T]: fn(Parser[T]) -> Parser[List[T]] = fn(item: Parser[T]) -> Parser[List[T]] {
+    return sep_by1[T, string](item, symbol(","))
+}
+
+/// Parse semicolon-separated list
+let semi_sep[T]: fn(Parser[T]) -> Parser[List[T]] = fn(item: Parser[T]) -> Parser[List[T]] {
+    return sep_by[T, string](item, symbol(";"))
+}
+
+/// Parse semicolon-separated list (at least one)
+let semi_sep1[T]: fn(Parser[T]) -> Parser[List[T]] = fn(item: Parser[T]) -> Parser[List[T]] {
+    return sep_by1[T, string](item, symbol(";"))
+}

@@ -12,7 +12,7 @@ Implementation of a Parser Combinator Library (PCL) for Kira, following the desi
 
 ### Task 1.1: Project Structure Setup
 **File**: Directory structure
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 
 Create the project directory structure:
 ```
@@ -39,7 +39,7 @@ tests/
 
 ### Task 1.2: Core Types Module
 **File**: `src/types.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: None
 
 Implement foundational types:
@@ -71,7 +71,7 @@ Helper functions:
 
 ### Task 1.3: String Utility Functions
 **File**: `src/types.ki` (or separate `src/string_utils.ki`)
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 1.2
 
 Implement string manipulation helpers needed by parsers:
@@ -95,7 +95,7 @@ Position helpers:
 
 ### Task 1.4: List Utility Functions
 **File**: `src/types.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 1.2
 
 Implement list operations:
@@ -111,7 +111,7 @@ Functions:
 
 ### Task 1.5: Types Module Tests
 **File**: `tests/test_types.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Tasks 1.2, 1.3, 1.4
 
 ```
@@ -135,7 +135,7 @@ Tests:
 
 ### Task 2.1: Basic Character Parsers
 **File**: `src/primitives.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Phase 1 complete
 
 Implement fundamental parsers:
@@ -154,7 +154,7 @@ Parsers:
 
 ### Task 2.2: Character Class Parsers
 **File**: `src/primitives.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 2.1
 
 Implement character class parsers:
@@ -177,7 +177,7 @@ Parsers:
 
 ### Task 2.3: String and Terminal Parsers
 **File**: `src/primitives.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 2.1
 
 Implement string-level parsers:
@@ -192,7 +192,7 @@ Parsers:
 
 ### Task 2.4: Parser Execution Functions
 **File**: `src/primitives.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Tasks 2.1-2.3
 
 Implement parser runners:
@@ -208,7 +208,7 @@ Note: `parse_complete` depends on `seq_left` from combinators - implement a basi
 
 ### Task 2.5: Primitives Module Tests
 **File**: `tests/test_primitives.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Tasks 2.1-2.4
 
 ```
@@ -239,7 +239,7 @@ Tests:
 
 ### Task 3.1: Sequencing Combinators
 **File**: `src/combinators.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Phase 2 complete
 
 Implement monadic sequencing:
@@ -260,7 +260,7 @@ Combinators:
 
 ### Task 3.2: Alternation Combinators
 **File**: `src/combinators.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 3.1
 
 Implement choice combinators:
@@ -274,7 +274,7 @@ Combinators:
 
 ### Task 3.3: Transformation Combinators
 **File**: `src/combinators.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 3.1
 
 Implement functor/applicative operations:
@@ -289,7 +289,7 @@ Combinators:
 
 ### Task 3.4: Repetition Combinators
 **File**: `src/combinators.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Tasks 3.1-3.3
 
 Implement repetition:
@@ -311,7 +311,7 @@ Combinators:
 
 ### Task 3.5: Lookahead and Backtracking
 **File**: `src/combinators.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 3.1
 
 Implement lookahead:
@@ -325,7 +325,7 @@ Combinators:
 
 ### Task 3.6: Error Enhancement Combinators
 **File**: `src/combinators.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 3.1
 
 Implement error handling:
@@ -338,7 +338,7 @@ Combinators:
 
 ### Task 3.7: Recursive Parser Support
 **File**: `src/combinators.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 3.1
 
 Implement lazy evaluation for recursion:
@@ -354,7 +354,7 @@ Combinators:
 
 ### Task 3.8: Combinators Module Tests
 **File**: `tests/test_combinators.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Tasks 3.1-3.7
 
 ```
@@ -417,7 +417,7 @@ Recursion:
 
 ### Task 4.1: Whitespace Handling
 **File**: `src/lexer.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Phase 3 complete
 
 Implement whitespace utilities:
@@ -430,7 +430,7 @@ Functions:
 
 ### Task 4.2: Token Parsers
 **File**: `src/lexer.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 4.1
 
 Implement common token parsers:
@@ -446,7 +446,7 @@ Parsers:
 
 ### Task 4.3: Lexer Module Tests
 **File**: `tests/test_lexer.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Tasks 4.1-4.2
 
 ```
@@ -474,7 +474,7 @@ Tests:
 
 ### Task 5.1: Operator Types
 **File**: `src/expr.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Phase 3 complete
 
 Implement operator infrastructure:
@@ -488,7 +488,7 @@ Types:
 
 ### Task 5.2: Chain Combinators
 **File**: `src/expr.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 5.1
 
 Implement chaining for operators:
@@ -502,7 +502,7 @@ Combinators:
 
 ### Task 5.3: Expression Parser Builder
 **File**: `src/expr.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 5.2
 
 Implement precedence table parsing:
@@ -515,7 +515,7 @@ Functions:
 
 ### Task 5.4: Expression Module Tests
 **File**: `tests/test_expr.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Tasks 5.1-5.3
 
 ```
@@ -535,7 +535,7 @@ Tests:
 
 ### Task 6.1: File Parsing Types
 **File**: `src/io.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Phase 3 complete
 
 Implement IO error types:
@@ -554,7 +554,7 @@ Functions:
 
 ### Task 6.2: File Parsing Functions
 **File**: `src/io.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 6.1
 
 Implement file parsing:
@@ -570,7 +570,7 @@ Functions:
 
 ### Task 7.1: Main PCL Module
 **File**: `src/pcl.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Phases 1-6 complete
 
 Create main module with public API:
@@ -591,7 +591,7 @@ Re-exports:
 
 ### Task 8.1: JSON Parser
 **File**: `examples/json.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Phases 1-4 complete
 
 Implement complete JSON parser:
@@ -615,7 +615,7 @@ Public API:
 
 ### Task 8.2: JSON Parser Tests
 **File**: `tests/test_json.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 8.1
 
 ```
@@ -643,7 +643,7 @@ Tests:
 
 ### Task 8.3: Calculator Example
 **File**: `examples/calc.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Phases 1-5 complete
 
 Implement expression parser and evaluator:
@@ -667,7 +667,7 @@ Functions:
 
 ### Task 8.4: Calculator Tests
 **File**: (within `tests/test_expr.ki` or separate)
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Task 8.3
 
 ```
@@ -687,7 +687,7 @@ Tests:
 
 ### Task 8.5: S-Expression Parser (Optional)
 **File**: `examples/lisp.ki`
-**Status**: [ ] Not Started
+**Status**: [x] Complete
 **Dependencies**: Phases 1-4 complete
 
 Implement S-expression parser:

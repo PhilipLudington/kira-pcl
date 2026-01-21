@@ -1,0 +1,207 @@
+/// Expression parsing utilities for the Parser Combinator Library
+///
+/// This module provides:
+/// - Operator types and associativity
+/// - Chain combinators for operator parsing
+/// - Expression parser builder for precedence tables
+
+import src.types
+import src.primitives
+import src.combinators
+
+// =============================================================================
+// Operator Types
+// =============================================================================
+
+/// Operator associativity
+type Assoc =
+    | AssocLeft
+    | AssocRight
+    | AssocNone
+
+/// Operator definition with parser and associativity
+type Operator[T] = {
+    parser: Parser[fn(T, T) -> T],
+    assoc: Assoc
+}
+
+/// Precedence level (list of operators at same precedence)
+type PrecLevel[T] = List[Operator[T]]
+
+// =============================================================================
+// Chain Combinators
+// =============================================================================
+
+/// Left-associative chain: a op b op c = ((a op b) op c)
+let chainl1[T]: fn(Parser[T], Parser[fn(T, T) -> T]) -> Parser[T] =
+    fn(term: Parser[T], op: Parser[fn(T, T) -> T]) -> Parser[T] {
+        return and_then[T, T](term, fn(first: T) -> Parser[T] {
+            return chainl1_rest[T](first, term, op)
+        })
+    }
+
+/// Helper for chainl1 - accumulate more operator applications
+let chainl1_rest[T]: fn(T, Parser[T], Parser[fn(T, T) -> T]) -> Parser[T] =
+    fn(acc: T, term: Parser[T], op: Parser[fn(T, T) -> T]) -> Parser[T] {
+        let more: Parser[T] = and_then[fn(T, T) -> T, T](op, fn(f: fn(T, T) -> T) -> Parser[T] {
+            return and_then[T, T](term, fn(next: T) -> Parser[T] {
+                let new_acc: T = f(acc, next)
+                return chainl1_rest[T](new_acc, term, op)
+            })
+        })
+        return or_else[T](more, pure[T](acc))
+    }
+
+/// Right-associative chain: a op b op c = (a op (b op c))
+let chainr1[T]: fn(Parser[T], Parser[fn(T, T) -> T]) -> Parser[T] =
+    fn(term: Parser[T], op: Parser[fn(T, T) -> T]) -> Parser[T] {
+        return and_then[T, T](term, fn(first: T) -> Parser[T] {
+            return or_else[T](
+                and_then[fn(T, T) -> T, T](op, fn(f: fn(T, T) -> T) -> Parser[T] {
+                    return map[T, T](chainr1[T](term, op), fn(rest: T) -> T {
+                        return f(first, rest)
+                    })
+                }),
+                pure[T](first)
+            )
+        })
+    }
+
+/// Left-associative chain with default value (zero or more applications)
+let chainl[T]: fn(Parser[T], Parser[fn(T, T) -> T], T) -> Parser[T] =
+    fn(term: Parser[T], op: Parser[fn(T, T) -> T], default_val: T) -> Parser[T] {
+        return or_else[T](chainl1[T](term, op), pure[T](default_val))
+    }
+
+/// Right-associative chain with default value (zero or more applications)
+let chainr[T]: fn(Parser[T], Parser[fn(T, T) -> T], T) -> Parser[T] =
+    fn(term: Parser[T], op: Parser[fn(T, T) -> T], default_val: T) -> Parser[T] {
+        return or_else[T](chainr1[T](term, op), pure[T](default_val))
+    }
+
+// =============================================================================
+// Expression Parser Builder
+// =============================================================================
+
+/// Add operators at one precedence level to a term parser
+let add_operators[T]: fn(Parser[T], PrecLevel[T]) -> Parser[T] =
+    fn(inner: Parser[T], ops: PrecLevel[T]) -> Parser[T] {
+        match ops {
+            Nil => { return inner }
+            Cons(first_op, _) => {
+                // Extract all operator parsers
+                let op_parsers: List[Parser[fn(T, T) -> T]] = list_map[Operator[T], Parser[fn(T, T) -> T]](
+                    ops,
+                    fn(op: Operator[T]) -> Parser[fn(T, T) -> T] { return op.parser }
+                )
+                let op_parser: Parser[fn(T, T) -> T] = choice[fn(T, T) -> T](op_parsers)
+
+                // Use associativity of first operator (all ops at same level should have same assoc)
+                match first_op.assoc {
+                    AssocLeft => { return chainl1[T](inner, op_parser) }
+                    AssocRight => { return chainr1[T](inner, op_parser) }
+                    AssocNone => {
+                        // Non-associative: only allow single application
+                        return or_else[T](
+                            map3[T, fn(T, T) -> T, T, T](
+                                inner,
+                                op_parser,
+                                inner,
+                                fn(a: T, f: fn(T, T) -> T, b: T) -> T { return f(a, b) }
+                            ),
+                            inner
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+/// Build expression parser from precedence table and base term parser
+/// Table is ordered from lowest to highest precedence
+let build_expr_parser[T]: fn(List[PrecLevel[T]], Parser[T]) -> Parser[T] =
+    fn(table: List[PrecLevel[T]], term: Parser[T]) -> Parser[T] {
+        return fold[PrecLevel[T], Parser[T]](
+            table,
+            term,
+            fn(inner: Parser[T], level: PrecLevel[T]) -> Parser[T] {
+                return add_operators[T](inner, level)
+            }
+        )
+    }
+
+// =============================================================================
+// Prefix and Postfix Operators
+// =============================================================================
+
+/// Prefix operator type
+type PrefixOp[T] = {
+    parser: Parser[fn(T) -> T]
+}
+
+/// Postfix operator type
+type PostfixOp[T] = {
+    parser: Parser[fn(T) -> T]
+}
+
+/// Parse zero or more prefix operators, then a term
+let prefix[T]: fn(Parser[fn(T) -> T], Parser[T]) -> Parser[T] =
+    fn(op: Parser[fn(T) -> T], term: Parser[T]) -> Parser[T] {
+        return or_else[T](
+            and_then[fn(T) -> T, T](op, fn(f: fn(T) -> T) -> Parser[T] {
+                return map[T, T](prefix[T](op, term), fn(t: T) -> T {
+                    return f(t)
+                })
+            }),
+            term
+        )
+    }
+
+/// Parse a term followed by zero or more postfix operators
+let postfix[T]: fn(Parser[T], Parser[fn(T) -> T]) -> Parser[T] =
+    fn(term: Parser[T], op: Parser[fn(T) -> T]) -> Parser[T] {
+        return and_then[T, T](term, fn(t: T) -> Parser[T] {
+            return postfix_rest[T](t, op)
+        })
+    }
+
+/// Helper for postfix - apply operators to accumulator
+let postfix_rest[T]: fn(T, Parser[fn(T) -> T]) -> Parser[T] =
+    fn(acc: T, op: Parser[fn(T) -> T]) -> Parser[T] {
+        let more: Parser[T] = and_then[fn(T) -> T, T](op, fn(f: fn(T) -> T) -> Parser[T] {
+            let new_acc: T = f(acc)
+            return postfix_rest[T](new_acc, op)
+        })
+        return or_else[T](more, pure[T](acc))
+    }
+
+// =============================================================================
+// Operator Helpers
+// =============================================================================
+
+/// Create a binary operator
+let binary[T]: fn(Parser[string], fn(T, T) -> T, Assoc) -> Operator[T] =
+    fn(sym: Parser[string], combine: fn(T, T) -> T, assoc: Assoc) -> Operator[T] {
+        return Operator {
+            parser: replace[string, fn(T, T) -> T](sym, combine),
+            assoc: assoc
+        }
+    }
+
+/// Create a left-associative binary operator
+let infixl[T]: fn(Parser[string], fn(T, T) -> T) -> Operator[T] =
+    fn(sym: Parser[string], combine: fn(T, T) -> T) -> Operator[T] {
+        return binary[T](sym, combine, AssocLeft)
+    }
+
+/// Create a right-associative binary operator
+let infixr[T]: fn(Parser[string], fn(T, T) -> T) -> Operator[T] =
+    fn(sym: Parser[string], combine: fn(T, T) -> T) -> Operator[T] {
+        return binary[T](sym, combine, AssocRight)
+    }
+
+/// Create a non-associative binary operator
+let infix_none[T]: fn(Parser[string], fn(T, T) -> T) -> Operator[T] =
+    fn(sym: Parser[string], combine: fn(T, T) -> T) -> Operator[T] {
+        return binary[T](sym, combine, AssocNone)
+    }

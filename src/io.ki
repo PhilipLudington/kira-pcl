@@ -1,0 +1,211 @@
+/// IO integration for the Parser Combinator Library
+///
+/// This module provides effectful operations:
+/// - File parsing with error handling
+/// - Error formatting for display
+
+import src.types
+import src.primitives
+import src.combinators
+
+// =============================================================================
+// Error Types
+// =============================================================================
+
+/// Error type for file parsing operations
+type ParseFileError =
+    | IoError(IoError)
+    | ParseError { path: string, error: ParseError }
+
+// =============================================================================
+// File Parsing
+// =============================================================================
+
+/// Parse file contents using given parser
+effect fn parse_file[T](path: string, parser: Parser[T]) -> IO[Result[T, ParseFileError]] {
+    let content: Result[string, IoError] = std.fs.read_file(path)
+    match content {
+        Err(io_err) => {
+            return Err(IoError(io_err))
+        }
+        Ok(source) => {
+            // Create combined parser that requires complete consumption
+            let complete_parser: Parser[T] = seq_left[T, void](parser, eof())
+            match parse[T](complete_parser, source) {
+                Ok(value) => { return Ok(value) }
+                Err(parse_err) => {
+                    return Err(ParseError { path: path, error: parse_err })
+                }
+            }
+        }
+    }
+}
+
+/// Parse file with leading whitespace stripped
+effect fn parse_file_ws[T](path: string, parser: Parser[T]) -> IO[Result[T, ParseFileError]] {
+    let content: Result[string, IoError] = std.fs.read_file(path)
+    match content {
+        Err(io_err) => {
+            return Err(IoError(io_err))
+        }
+        Ok(source) => {
+            // Strip leading whitespace, require complete consumption
+            let ws_stripped: Parser[T] = seq_right[void, T](
+                replace[List[char], void](many[char](whitespace()), void),
+                parser
+            )
+            let complete_parser: Parser[T] = seq_left[T, void](ws_stripped, eof())
+            match parse[T](complete_parser, source) {
+                Ok(value) => { return Ok(value) }
+                Err(parse_err) => {
+                    return Err(ParseError { path: path, error: parse_err })
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Error Formatting
+// =============================================================================
+
+/// Format parse file error for display
+effect fn format_parse_file_error(error: ParseFileError) -> IO[string] {
+    match error {
+        IoError(e) => {
+            return std.string.concat("IO Error: ", std.io_error.to_string(e))
+        }
+        ParseError { path: p, error: e } => {
+            let location: string = std.string.concat(
+                "line ",
+                std.string.concat(
+                    std.i32.to_string(e.position.line),
+                    std.string.concat(
+                        ", column ",
+                        std.i32.to_string(e.position.column)
+                    )
+                )
+            )
+            return std.string.concat(
+                "Parse error in ",
+                std.string.concat(
+                    p,
+                    std.string.concat(" at ", location)
+                )
+            )
+        }
+    }
+}
+
+/// Format parse error with expected/actual information
+let format_parse_error: fn(ParseError) -> string = fn(e: ParseError) -> string {
+    let location: string = std.string.concat(
+        "at line ",
+        std.string.concat(
+            std.i32.to_string(e.position.line),
+            std.string.concat(
+                ", column ",
+                std.i32.to_string(e.position.column)
+            )
+        )
+    )
+
+    let expected_str: string = format_expected_list(e.expected)
+
+    let actual_str: string = match e.actual {
+        Some(c) => { std.string.concat("got '", std.string.concat(char_to_string(c), "'")) }
+        None => { "got end of input" }
+    }
+
+    return std.string.concat(
+        "Parse error ",
+        std.string.concat(
+            location,
+            std.string.concat(
+                ": expected ",
+                std.string.concat(
+                    expected_str,
+                    std.string.concat(", ", actual_str)
+                )
+            )
+        )
+    )
+}
+
+/// Format list of expected items
+let format_expected_list: fn(List[Expected]) -> string = fn(expected: List[Expected]) -> string {
+    match expected {
+        Nil => { return "nothing" }
+        Cons(e, Nil) => { return format_expected(e) }
+        Cons(e, rest) => {
+            return std.string.concat(
+                format_expected(e),
+                std.string.concat(" or ", format_expected_list(rest))
+            )
+        }
+    }
+}
+
+/// Format single expected item
+let format_expected: fn(Expected) -> string = fn(exp: Expected) -> string {
+    match exp {
+        Literal(s) => { return std.string.concat("'", std.string.concat(s, "'")) }
+        CharClass(desc) => { return desc }
+        EndOfInput => { return "end of input" }
+        Custom(msg) => { return msg }
+    }
+}
+
+// =============================================================================
+// Context Formatting
+// =============================================================================
+
+/// Format error context stack
+let format_context: fn(List[string]) -> string = fn(ctx: List[string]) -> string {
+    match ctx {
+        Nil => { return "" }
+        Cons(c, Nil) => { return std.string.concat(" while parsing ", c) }
+        Cons(c, rest) => {
+            return std.string.concat(
+                std.string.concat(" while parsing ", c),
+                format_context(rest)
+            )
+        }
+    }
+}
+
+/// Format complete error with context
+let format_error_with_context: fn(ParseError) -> string = fn(e: ParseError) -> string {
+    let base: string = format_parse_error(e)
+    let ctx: string = format_context(e.context)
+    return std.string.concat(base, ctx)
+}
+
+// =============================================================================
+// Utility Functions
+// =============================================================================
+
+/// Parse string, returning formatted error message on failure
+let parse_or_error[T]: fn(Parser[T], string) -> Result[T, string] =
+    fn(parser: Parser[T], source: string) -> Result[T, string] {
+        let complete_parser: Parser[T] = seq_left[T, void](parser, eof())
+        match parse[T](complete_parser, source) {
+            Ok(value) => { return Ok(value) }
+            Err(e) => { return Err(format_error_with_context(e)) }
+        }
+    }
+
+/// Run parser and print result (for REPL/debugging)
+effect fn run_and_print[T](parser: Parser[T], source: string, show: fn(T) -> string) -> IO[void] {
+    let complete_parser: Parser[T] = seq_left[T, void](parser, eof())
+    match parse[T](complete_parser, source) {
+        Ok(value) => {
+            std.io.println(show(value))
+            return
+        }
+        Err(e) => {
+            std.io.println(format_error_with_context(e))
+            return
+        }
+    }
+}
