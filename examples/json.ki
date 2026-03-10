@@ -1,7 +1,15 @@
-/// JSON Parser Example
-///
-/// A complete JSON parser implementation using the Parser Combinator Library.
-/// Demonstrates recursive parsers, lexer helpers, and error handling.
+// JSON Parser Example
+//
+// A complete JSON parser using the monomorphic Parser Combinator Library.
+// Represents JSON values directly using the PCL Value type:
+//   null    -> VVoid
+//   bool    -> VBool(true/false)
+//   number  -> VFloat(f64) or VInt(i64)
+//   string  -> VString(s)
+//   array   -> VList([values...])
+//   object  -> VList([VPair(VString(key), value), ...])
+
+module examples.json
 
 import src.types
 import src.primitives
@@ -9,167 +17,77 @@ import src.combinators
 import src.lexer
 
 // =============================================================================
-// JSON AST
+// JSON Primitive Parsers
 // =============================================================================
 
-/// JSON value representation
-type JsonValue =
-    | JsonNull
-    | JsonBool(bool)
-    | JsonNumber(f64)
-    | JsonString(string)
-    | JsonArray(List[JsonValue])
-    | JsonObject(List[(string, JsonValue)])
-
-// =============================================================================
-// JSON Primitives
-// =============================================================================
-
-/// Parse JSON null
-let json_null: fn() -> Parser[JsonValue] = fn() -> Parser[JsonValue] {
-    return replace[string, JsonValue](keyword("null"), JsonNull)
+// Parse JSON null -> VVoid
+fn json_null() -> fn(Input) -> ParseResult {
+    return replace_p(keyword("null"), VVoid)
 }
 
-/// Parse JSON boolean
-let json_bool: fn() -> Parser[JsonValue] = fn() -> Parser[JsonValue] {
-    return or_else[JsonValue](
-        replace[string, JsonValue](keyword("true"), JsonBool(true)),
-        replace[string, JsonValue](keyword("false"), JsonBool(false))
+// Parse JSON boolean -> VBool
+fn json_bool() -> fn(Input) -> ParseResult {
+    return or_else(
+        replace_p(keyword("true"), VBool(true)),
+        replace_p(keyword("false"), VBool(false))
     )
 }
 
-/// Parse JSON number (integers and floats)
-let json_number: fn() -> Parser[JsonValue] = fn() -> Parser[JsonValue] {
-    // Optional sign
-    let sign: Parser[f64] = or_else[f64](
-        replace[char, f64](char_p('-'), -1.0),
-        pure[f64](1.0)
-    )
-
-    // Integer part
-    let digits: Parser[string] = map[List[char], string](
-        many1[char](digit()),
-        fn(chars: List[char]) -> string { return chars_to_string(chars) }
-    )
-
-    // Optional fractional part
-    let frac: Parser[f64] = or_else[f64](
-        map2[char, string, f64](
-            char_p('.'),
-            digits,
-            fn(_: char, d: string) -> f64 {
-                let frac_val: f64 = std.string.parse_f64(std.string.concat("0.", d))
-                return frac_val
-            }
-        ),
-        pure[f64](0.0)
-    )
-
-    // Optional exponent part
-    let exp_sign: Parser[i64] = or_else[i64](
-        replace[char, i64](char_p('-'), -1),
-        or_else[i64](
-            replace[char, i64](char_p('+'), 1),
-            pure[i64](1)
-        )
-    )
-    let exp: Parser[f64] = or_else[f64](
-        map3[char, i64, string, f64](
-            or_else[char](char_p('e'), char_p('E')),
-            exp_sign,
-            digits,
-            fn(_: char, s: i64, d: string) -> f64 {
-                let exp_val: i64 = std.string.parse_i64(d) * s
-                return std.math.pow(10.0, std.math.i64_to_f64(exp_val))
-            }
-        ),
-        pure[f64](1.0)
-    )
-
-    // Combine all parts
-    return lexeme[JsonValue](
-        map[((f64, string), (f64, f64)), JsonValue](
-            seq_pair[(f64, string), (f64, f64)](
-                seq_pair[f64, string](sign, digits),
-                seq_pair[f64, f64](frac, exp)
-            ),
-            fn(parts: ((f64, string), (f64, f64))) -> JsonValue {
-                let (sign_digits, frac_exp): ((f64, string), (f64, f64)) = parts
-                let (s, int_str): (f64, string) = sign_digits
-                let (f, e): (f64, f64) = frac_exp
-                let int_val: f64 = std.string.parse_f64(int_str)
-                let result: f64 = s * (int_val + f) * e
-                return JsonNumber(result)
-            }
-        )
-    )
+// Parse JSON number -> VFloat for decimals, VInt for integers
+fn json_number() -> fn(Input) -> ParseResult {
+    return or_else(float_literal(), integer())
 }
 
-/// Parse JSON string
-let json_string: fn() -> Parser[JsonValue] = fn() -> Parser[JsonValue] {
-    return map[string, JsonValue](string_literal(), fn(s: string) -> JsonValue {
-        return JsonString(s)
-    })
+// Parse JSON string -> VString (string_literal already returns VString)
+fn json_string() -> fn(Input) -> ParseResult {
+    return string_literal()
 }
 
 // =============================================================================
-// JSON Compound Types
+// JSON Value Parser (with recursive compound types defined inline)
 // =============================================================================
 
-/// Forward declaration for recursive parsing
-let json_value: fn() -> Parser[JsonValue]
-
-/// Parse JSON array
-let json_array: fn() -> Parser[JsonValue] = fn() -> Parser[JsonValue] {
-    return map[List[JsonValue], JsonValue](
-        between[string, List[JsonValue], string](
-            symbol("["),
-            sep_by[JsonValue, string](lazy[JsonValue](json_value), symbol(",")),
-            symbol("]")
-        ),
-        fn(items: List[JsonValue]) -> JsonValue { return JsonArray(items) }
-    )
-}
-
-/// Parse JSON object key-value pair
-let json_pair: fn() -> Parser[(string, JsonValue)] = fn() -> Parser[(string, JsonValue)] {
-    return map3[string, string, JsonValue, (string, JsonValue)](
+// Parse any JSON value.
+// Arrays and objects are defined here because they recursively reference
+// json_value via lazy_p.
+fn json_value() -> fn(Input) -> ParseResult {
+    // Parse a key:value pair -> VPair(VString(key), value)
+    let json_pair_p: fn(Input) -> ParseResult = map3(
         string_literal(),
         symbol(":"),
-        lazy[JsonValue](json_value),
-        fn(key: string, _: string, value: JsonValue) -> (string, JsonValue) {
-            return (key, value)
+        lazy_p(json_value),
+        fn(key: Value, _colon: Value, val: Value) -> Value {
+            return VPair(key, val)
         }
     )
-}
 
-/// Parse JSON object
-let json_object: fn() -> Parser[JsonValue] = fn() -> Parser[JsonValue] {
-    return map[List[(string, JsonValue)], JsonValue](
-        between[string, List[(string, JsonValue)], string](
-            symbol("{"),
-            sep_by[(string, JsonValue), string](json_pair(), symbol(",")),
-            symbol("}")
-        ),
-        fn(pairs: List[(string, JsonValue)]) -> JsonValue { return JsonObject(pairs) }
+    // Parse JSON array: [ value, value, ... ] -> VList
+    let json_array_p: fn(Input) -> ParseResult = between(
+        symbol("["),
+        sep_by(lazy_p(json_value), symbol(",")),
+        symbol("]")
     )
-}
 
-/// Parse any JSON value
-let json_value: fn() -> Parser[JsonValue] = fn() -> Parser[JsonValue] {
-    return label[JsonValue](
-        choice[JsonValue](Cons(
+    // Parse JSON object: { "key": value, ... } -> VList of VPair
+    let json_object_p: fn(Input) -> ParseResult = between(
+        symbol("{"),
+        sep_by(json_pair_p, symbol(",")),
+        symbol("}")
+    )
+
+    return label_p(
+        choice(Cons(
             json_null(),
             Cons(
                 json_bool(),
                 Cons(
-                    json_number(),
+                    json_string(),
                     Cons(
-                        json_string(),
+                        json_number(),
                         Cons(
-                            json_array(),
+                            json_array_p,
                             Cons(
-                                json_object(),
+                                json_object_p,
                                 Nil
                             )
                         )
@@ -185,160 +103,155 @@ let json_value: fn() -> Parser[JsonValue] = fn() -> Parser[JsonValue] {
 // Public API
 // =============================================================================
 
-/// Parse complete JSON document
-pub let parse_json: fn(string) -> Result[JsonValue, ParseError] =
-    fn(source: string) -> Result[JsonValue, ParseError] {
-        let parser: Parser[JsonValue] = seq_left[JsonValue, void](
-            seq_right[void, JsonValue](skip_ws(), json_value()),
-            eof()
-        )
-        return parse[JsonValue](parser, source)
-    }
+// Parse a complete JSON document from a string.
+// Leading/trailing whitespace is consumed. Fails if input is not fully consumed.
+pub fn parse_json(source: string) -> Result[Value, ParseError] {
+    let parser: fn(Input) -> ParseResult = seq_left(
+        seq_right(skip_ws(), json_value()),
+        eof()
+    )
+    return parse(parser, source)
+}
 
-/// Parse JSON value (may have remaining input)
-pub let parse_json_value: fn(string) -> Result[JsonValue, ParseError] =
-    fn(source: string) -> Result[JsonValue, ParseError] {
-        let parser: Parser[JsonValue] = seq_right[void, JsonValue](skip_ws(), json_value())
-        return parse[JsonValue](parser, source)
-    }
-
-// =============================================================================
-// JSON Pretty Printing
-// =============================================================================
-
-/// Convert JSON value to string representation
-pub let json_to_string: fn(JsonValue) -> string = fn(value: JsonValue) -> string {
-    match value {
-        JsonNull => { return "null" }
-        JsonBool(b) => {
+// Convert a Value (representing JSON) back to a JSON string.
+pub fn json_to_string(v: Value) -> string {
+    match v {
+        VVoid => { return "null" }
+        VBool(b) => {
             if b {
                 return "true"
             }
             return "false"
         }
-        JsonNumber(n) => { return std.f64.to_string(n) }
-        JsonString(s) => { return std.string.concat("\"", std.string.concat(escape_string(s), "\"")) }
-        JsonArray(items) => {
-            let inner: string = join_json_values(items)
-            return std.string.concat("[", std.string.concat(inner, "]"))
+        VInt(n) => { return to_string(n) }
+        VFloat(f) => { return to_string(f) }
+        VString(s) => { return "\"" + escape_json_string(s) + "\"" }
+        VChar(c) => { return "\"" + to_string(c) + "\"" }
+        VList(items) => {
+            if is_object_list(items) {
+                return "{" + join_object_pairs(items) + "}"
+            }
+            return "[" + join_array_items(items) + "]"
         }
-        JsonObject(pairs) => {
-            let inner: string = join_json_pairs(pairs)
-            return std.string.concat("{", std.string.concat(inner, "}"))
+        VPair(k, val) => {
+            return json_to_string(k) + ": " + json_to_string(val)
         }
     }
 }
 
-/// Escape special characters in string
-let escape_string: fn(string) -> string = fn(s: string) -> string {
+// Get a value from a JSON object by key.
+// The object must be VList of VPair(VString(key), value).
+pub fn json_get(obj: Value, key: string) -> Option[Value] {
+    match obj {
+        VList(pairs) => { return find_by_key(pairs, key) }
+        _ => { return None }
+    }
+}
+
+// Get a value from a JSON array by index.
+pub fn json_index(arr: Value, index: i32) -> Option[Value] {
+    match arr {
+        VList(items) => { return list_at_index(items, index) }
+        _ => { return None }
+    }
+}
+
+// =============================================================================
+// Private Helpers
+// =============================================================================
+
+// Escape special characters in a JSON string
+fn escape_json_string(s: string) -> string {
     var result: string = ""
-    var i: i64 = 0
-    let len: i64 = std.string.length(s)
+    var i: i32 = 0
+    let len: i32 = std.string.length(s)
     loop {
         if i >= len {
             return result
         }
-        let c: char = std.string.char_at(s, i)
-        if c == '"' {
-            result = std.string.concat(result, "\\\"")
-        } else if c == '\\' {
-            result = std.string.concat(result, "\\\\")
-        } else if c == '\n' {
-            result = std.string.concat(result, "\\n")
-        } else if c == '\t' {
-            result = std.string.concat(result, "\\t")
-        } else if c == '\r' {
-            result = std.string.concat(result, "\\r")
-        } else {
-            result = std.string.concat(result, char_to_string(c))
+        match std.string.char_at(s, i) {
+            Some(c) => {
+                if c == '"' {
+                    result = result + "\\\""
+                } else if c == '\\' {
+                    result = result + "\\\\"
+                } else if c == '\n' {
+                    result = result + "\\n"
+                } else if c == '\t' {
+                    result = result + "\\t"
+                } else if c == '\r' {
+                    result = result + "\\r"
+                } else {
+                    result = result + to_string(c)
+                }
+            }
+            None => { return result }
         }
         i = i + 1
     }
 }
 
-/// Join list of JSON values with commas
-let join_json_values: fn(List[JsonValue]) -> string = fn(values: List[JsonValue]) -> string {
-    match values {
-        Nil => { return "" }
-        Cons(v, Nil) => { return json_to_string(v) }
-        Cons(v, rest) => {
-            return std.string.concat(
-                json_to_string(v),
-                std.string.concat(", ", join_json_values(rest))
-            )
+// Check if a list of Value items are all VPair (indicating a JSON object)
+fn is_object_list(items: List[Value]) -> bool {
+    match items {
+        Nil => { return false }
+        Cons(first, _) => {
+            match first {
+                VPair(_, _) => { return true }
+                _ => { return false }
+            }
         }
     }
 }
 
-/// Join list of key-value pairs with commas
-let join_json_pairs: fn(List[(string, JsonValue)]) -> string =
-    fn(pairs: List[(string, JsonValue)]) -> string {
-        match pairs {
-            Nil => { return "" }
-            Cons(pair, Nil) => {
-                let (key, value): (string, JsonValue) = pair
-                return std.string.concat(
-                    std.string.concat("\"", std.string.concat(escape_string(key), "\": ")),
-                    json_to_string(value)
-                )
-            }
-            Cons(pair, rest) => {
-                let (key, value): (string, JsonValue) = pair
-                return std.string.concat(
-                    std.string.concat("\"", std.string.concat(escape_string(key), "\": ")),
-                    std.string.concat(
-                        json_to_string(value),
-                        std.string.concat(", ", join_json_pairs(rest))
-                    )
-                )
-            }
+// Join array items with ", " separator
+fn join_array_items(items: List[Value]) -> string {
+    match items {
+        Nil => { return "" }
+        Cons(v, Nil) => { return json_to_string(v) }
+        Cons(v, rest) => {
+            return json_to_string(v) + ", " + join_array_items(rest)
         }
     }
+}
 
-// =============================================================================
-// JSON Accessors
-// =============================================================================
-
-/// Get value from JSON object by key
-pub let json_get: fn(JsonValue, string) -> Option[JsonValue] =
-    fn(obj: JsonValue, key: string) -> Option[JsonValue] {
-        match obj {
-            JsonObject(pairs) => { return find_pair(pairs, key) }
-            _ => { return None }
+// Join object pairs with ", " separator
+fn join_object_pairs(pairs: List[Value]) -> string {
+    match pairs {
+        Nil => { return "" }
+        Cons(pair, Nil) => { return json_to_string(pair) }
+        Cons(pair, rest) => {
+            return json_to_string(pair) + ", " + join_object_pairs(rest)
         }
     }
+}
 
-/// Find value in list of pairs
-let find_pair: fn(List[(string, JsonValue)], string) -> Option[JsonValue] =
-    fn(pairs: List[(string, JsonValue)], key: string) -> Option[JsonValue] {
-        match pairs {
-            Nil => { return None }
-            Cons(pair, rest) => {
-                let (k, v): (string, JsonValue) = pair
-                if k == key {
-                    return Some(v)
+// Find a value by key in a list of VPair(VString(key), value)
+fn find_by_key(pairs: List[Value], key: string) -> Option[Value] {
+    match pairs {
+        Nil => { return None }
+        Cons(pair, rest) => {
+            match pair {
+                VPair(k, v) => {
+                    let k_str: string = unwrap_string(k)
+                    if k_str == key {
+                        return Some(v)
+                    }
+                    return find_by_key(rest, key)
                 }
-                return find_pair(rest, key)
+                _ => { return find_by_key(rest, key) }
             }
         }
     }
+}
 
-/// Get element from JSON array by index
-pub let json_index: fn(JsonValue, i32) -> Option[JsonValue] =
-    fn(arr: JsonValue, index: i32) -> Option[JsonValue] {
-        match arr {
-            JsonArray(items) => { return list_at(items, index) }
-            _ => { return None }
-        }
-    }
-
-/// Get element at index from list
-let list_at[T]: fn(List[T], i32) -> Option[T] = fn(list: List[T], index: i32) -> Option[T] {
+// Get element at index from a list
+fn list_at_index(items: List[Value], index: i32) -> Option[Value] {
     if index < 0 {
         return None
     }
     var i: i32 = 0
-    var current: List[T] = list
+    var current: List[Value] = items
     loop {
         match current {
             Nil => { return None }
@@ -352,53 +265,3 @@ let list_at[T]: fn(List[T], i32) -> Option[T] = fn(list: List[T], index: i32) ->
         }
     }
 }
-
-/// Check if JSON value is null
-pub let is_json_null: fn(JsonValue) -> bool = fn(v: JsonValue) -> bool {
-    match v {
-        JsonNull => { return true }
-        _ => { return false }
-    }
-}
-
-/// Extract boolean from JSON value
-pub let json_as_bool: fn(JsonValue) -> Option[bool] = fn(v: JsonValue) -> Option[bool] {
-    match v {
-        JsonBool(b) => { return Some(b) }
-        _ => { return None }
-    }
-}
-
-/// Extract number from JSON value
-pub let json_as_number: fn(JsonValue) -> Option[f64] = fn(v: JsonValue) -> Option[f64] {
-    match v {
-        JsonNumber(n) => { return Some(n) }
-        _ => { return None }
-    }
-}
-
-/// Extract string from JSON value
-pub let json_as_string: fn(JsonValue) -> Option[string] = fn(v: JsonValue) -> Option[string] {
-    match v {
-        JsonString(s) => { return Some(s) }
-        _ => { return None }
-    }
-}
-
-/// Extract array from JSON value
-pub let json_as_array: fn(JsonValue) -> Option[List[JsonValue]] =
-    fn(v: JsonValue) -> Option[List[JsonValue]] {
-        match v {
-            JsonArray(items) => { return Some(items) }
-            _ => { return None }
-        }
-    }
-
-/// Extract object from JSON value
-pub let json_as_object: fn(JsonValue) -> Option[List[(string, JsonValue)]] =
-    fn(v: JsonValue) -> Option[List[(string, JsonValue)]] {
-        match v {
-            JsonObject(pairs) => { return Some(pairs) }
-            _ => { return None }
-        }
-    }

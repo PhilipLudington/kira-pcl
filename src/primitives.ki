@@ -1,11 +1,6 @@
-/// Primitive parsers for the Parser Combinator Library
-///
-/// This module provides:
-/// - Basic character parsers (any_char, char_p, satisfy)
-/// - Character class parsers (digit, letter, whitespace, etc.)
-/// - String parsers (string_p, eof)
-/// - Pure parsers (pure, fail)
-/// - Parser execution functions (run, parse)
+// Primitive parsers for the Parser Combinator Library
+
+module src.primitives
 
 import src.types
 
@@ -13,23 +8,19 @@ import src.types
 // Character Predicates
 // =============================================================================
 
-/// Check if character is a digit (0-9)
-let is_digit: fn(char) -> bool = fn(c: char) -> bool {
+pub fn is_digit(c: char) -> bool {
     return c >= '0' and c <= '9'
 }
 
-/// Check if character is a letter (a-z, A-Z)
-let is_alpha: fn(char) -> bool = fn(c: char) -> bool {
+pub fn is_alpha(c: char) -> bool {
     return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z')
 }
 
-/// Check if character is alphanumeric
-let is_alphanumeric: fn(char) -> bool = fn(c: char) -> bool {
+pub fn is_alphanumeric(c: char) -> bool {
     return is_alpha(c) or is_digit(c)
 }
 
-/// Check if character is whitespace
-let is_whitespace: fn(char) -> bool = fn(c: char) -> bool {
+pub fn is_whitespace(c: char) -> bool {
     return c == ' ' or c == '\t' or c == '\n' or c == '\r'
 }
 
@@ -37,153 +28,115 @@ let is_whitespace: fn(char) -> bool = fn(c: char) -> bool {
 // Basic Character Parsers
 // =============================================================================
 
-/// Parse any single character
-let any_char: fn() -> Parser[char] = fn() -> Parser[char] {
-    return fn(input: Input) -> ParseResult[char] {
-        let remaining: string = substring(input.source, input.pos.offset)
+pub fn any_char() -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        let remaining: string = remaining_from(input.source, input.pos.offset)
         match string_head(remaining) {
             None => {
-                return Failure {
-                    error: error_at(input.pos, CharClass("any character"), None)
-                }
+                return Failure(error_at(input.pos, CharClass("any character"), None))
             }
             Some(c) => {
                 let new_pos: Position = advance_position(input.pos, c)
-                return Success {
-                    value: c,
-                    remaining: Input { source: input.source, pos: new_pos }
-                }
+                return Success(VChar(c), Input { source: input.source, pos: new_pos })
             }
         }
     }
 }
 
-/// Parse a specific character
-let char_p: fn(char) -> Parser[char] = fn(expected: char) -> Parser[char] {
-    return fn(input: Input) -> ParseResult[char] {
-        let remaining: string = substring(input.source, input.pos.offset)
+pub fn char_p(expected: char) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        let remaining: string = remaining_from(input.source, input.pos.offset)
         match string_head(remaining) {
             None => {
-                return Failure {
-                    error: error_at(input.pos, Literal(char_to_string(expected)), None)
-                }
+                return Failure(error_at(input.pos, Literal(to_string(expected)), None))
             }
             Some(c) => {
                 if c == expected {
                     let new_pos: Position = advance_position(input.pos, c)
-                    return Success {
-                        value: c,
-                        remaining: Input { source: input.source, pos: new_pos }
-                    }
+                    return Success(VChar(c), Input { source: input.source, pos: new_pos })
                 }
-                return Failure {
-                    error: error_at(input.pos, Literal(char_to_string(expected)), Some(c))
-                }
+                return Failure(error_at(input.pos, Literal(to_string(expected)), Some(c)))
             }
         }
     }
 }
 
-/// Parse character satisfying predicate
-let satisfy: fn(fn(char) -> bool, string) -> Parser[char] =
-    fn(pred: fn(char) -> bool, description: string) -> Parser[char] {
-        return fn(input: Input) -> ParseResult[char] {
-            let remaining: string = substring(input.source, input.pos.offset)
-            match string_head(remaining) {
-                None => {
-                    return Failure {
-                        error: error_at(input.pos, CharClass(description), None)
-                    }
+pub fn satisfy(pred: fn(char) -> bool, description: string) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        let remaining: string = remaining_from(input.source, input.pos.offset)
+        match string_head(remaining) {
+            None => {
+                return Failure(error_at(input.pos, CharClass(description), None))
+            }
+            Some(c) => {
+                if pred(c) {
+                    let new_pos: Position = advance_position(input.pos, c)
+                    return Success(VChar(c), Input { source: input.source, pos: new_pos })
                 }
-                Some(c) => {
-                    if pred(c) {
-                        let new_pos: Position = advance_position(input.pos, c)
-                        return Success {
-                            value: c,
-                            remaining: Input { source: input.source, pos: new_pos }
-                        }
-                    }
-                    return Failure {
-                        error: error_at(input.pos, CharClass(description), Some(c))
-                    }
-                }
+                return Failure(error_at(input.pos, CharClass(description), Some(c)))
             }
         }
     }
+}
 
 // =============================================================================
 // Character Class Parsers
 // =============================================================================
 
-/// Parse a digit character
-let digit: fn() -> Parser[char] = fn() -> Parser[char] {
+pub fn digit() -> fn(Input) -> ParseResult {
     return satisfy(is_digit, "digit")
 }
 
-/// Parse a letter character
-let letter: fn() -> Parser[char] = fn() -> Parser[char] {
+pub fn letter() -> fn(Input) -> ParseResult {
     return satisfy(is_alpha, "letter")
 }
 
-/// Parse alphanumeric character
-let alphanumeric: fn() -> Parser[char] = fn() -> Parser[char] {
+pub fn alphanumeric() -> fn(Input) -> ParseResult {
     return satisfy(is_alphanumeric, "alphanumeric")
 }
 
-/// Parse whitespace character
-let whitespace: fn() -> Parser[char] = fn() -> Parser[char] {
+pub fn whitespace() -> fn(Input) -> ParseResult {
     return satisfy(is_whitespace, "whitespace")
 }
 
-/// Parse one of given characters
-let one_of: fn(string) -> Parser[char] = fn(chars: string) -> Parser[char] {
+pub fn one_of(chars: string) -> fn(Input) -> ParseResult {
     let pred: fn(char) -> bool = fn(c: char) -> bool {
         return string_contains_char(chars, c)
     }
-    return satisfy(pred, std.string.concat("one of '", std.string.concat(chars, "'")))
+    return satisfy(pred, "one of '" + chars + "'")
 }
 
-/// Parse none of given characters
-let none_of: fn(string) -> Parser[char] = fn(chars: string) -> Parser[char] {
+pub fn none_of(chars: string) -> fn(Input) -> ParseResult {
     let pred: fn(char) -> bool = fn(c: char) -> bool {
         return not string_contains_char(chars, c)
     }
-    return satisfy(pred, std.string.concat("none of '", std.string.concat(chars, "'")))
+    return satisfy(pred, "none of '" + chars + "'")
 }
 
 // =============================================================================
 // String and Terminal Parsers
 // =============================================================================
 
-/// Parse exact string
-let string_p: fn(string) -> Parser[string] = fn(expected: string) -> Parser[string] {
-    return fn(input: Input) -> ParseResult[string] {
-        let remaining: string = substring(input.source, input.pos.offset)
+pub fn string_p(expected: string) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        let remaining: string = remaining_from(input.source, input.pos.offset)
         if starts_with(remaining, expected) {
             let new_pos: Position = advance_position_by_string(input.pos, expected)
-            return Success {
-                value: expected,
-                remaining: Input { source: input.source, pos: new_pos }
-            }
+            return Success(VString(expected), Input { source: input.source, pos: new_pos })
         }
         let actual: Option[char] = string_head(remaining)
-        return Failure {
-            error: error_at(input.pos, Literal(expected), actual)
-        }
+        return Failure(error_at(input.pos, Literal(expected), actual))
     }
 }
 
-/// Parse end of input
-let eof: fn() -> Parser[void] = fn() -> Parser[void] {
-    return fn(input: Input) -> ParseResult[void] {
-        let remaining: string = substring(input.source, input.pos.offset)
+pub fn eof() -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        let remaining: string = remaining_from(input.source, input.pos.offset)
         if string_is_empty(remaining) {
-            return Success { value: void, remaining: input }
+            return Success(VVoid, input)
         }
         let actual: Option[char] = string_head(remaining)
-        return Failure {
-            error: error_at(input.pos, EndOfInput, actual)
-        }
+        return Failure(error_at(input.pos, EndOfInput, actual))
     }
 }
 
@@ -191,19 +144,15 @@ let eof: fn() -> Parser[void] = fn() -> Parser[void] {
 // Pure Parsers
 // =============================================================================
 
-/// Parser that always succeeds with given value (monadic return)
-let pure[T]: fn(T) -> Parser[T] = fn(value: T) -> Parser[T] {
-    return fn(input: Input) -> ParseResult[T] {
-        return Success { value: value, remaining: input }
+pub fn pure_p(value: Value) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        return Success(value, input)
     }
 }
 
-/// Parser that always fails with given message
-let fail[T]: fn(string) -> Parser[T] = fn(message: string) -> Parser[T] {
-    return fn(input: Input) -> ParseResult[T] {
-        return Failure {
-            error: error_at(input.pos, Custom(message), None)
-        }
+pub fn fail_p(message: string) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        return Failure(error_at(input.pos, Custom(message), None))
     }
 }
 
@@ -211,18 +160,14 @@ let fail[T]: fn(string) -> Parser[T] = fn(message: string) -> Parser[T] {
 // Parser Execution Functions
 // =============================================================================
 
-/// Run a parser on input string, returning ParseResult
-let run[T]: fn(Parser[T], string) -> ParseResult[T] =
-    fn(parser: Parser[T], source: string) -> ParseResult[T] {
-        let input: Input = input_new(source)
-        return parser(input)
-    }
+pub fn run(parser: fn(Input) -> ParseResult, source: string) -> ParseResult {
+    let input: Input = input_new(source)
+    return parser(input)
+}
 
-/// Run parser and extract value or error as Result
-let parse[T]: fn(Parser[T], string) -> Result[T, ParseError] =
-    fn(parser: Parser[T], source: string) -> Result[T, ParseError] {
-        match run[T](parser, source) {
-            Success { value: v, remaining: _ } => { return Ok(v) }
-            Failure { error: e } => { return Err(e) }
-        }
+pub fn parse(parser: fn(Input) -> ParseResult, source: string) -> Result[Value, ParseError] {
+    match run(parser, source) {
+        Success(v, _) => { return Ok(v) }
+        Failure(e) => { return Err(e) }
     }
+}

@@ -1,359 +1,410 @@
-/// Parser combinators for the Parser Combinator Library
-///
-/// This module provides:
-/// - Sequencing combinators (and_then, seq_left, seq_right, seq_pair, between)
-/// - Alternation combinators (or_else, choice, optional)
-/// - Transformation combinators (map, map2, map3, replace)
-/// - Repetition combinators (many, many1, count, sep_by, sep_by1, end_by)
-/// - Lookahead combinators (lookahead, not_followed_by, try_p)
-/// - Error enhancement (label, context)
-/// - Recursive parser support (lazy, fix)
+// Parser combinators for the Parser Combinator Library
+
+module src.combinators
 
 import src.types
 import src.primitives
 
 // =============================================================================
+// Monadic Bind
+// =============================================================================
+
+/// Monadic bind: run parser `pa`, pass its Value to `f` to get a second
+/// parser, then run that second parser on the remaining input.
+pub fn and_then(pa: fn(Input) -> ParseResult, f: fn(Value) -> fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match pa(input) {
+            Failure(e) => { return Failure(e) }
+            Success(a, rest) => {
+                let pb: fn(Input) -> ParseResult = f(a)
+                return pb(rest)
+            }
+        }
+    }
+}
+
+// =============================================================================
 // Sequencing Combinators
 // =============================================================================
 
-/// Sequence two parsers, combining results (monadic bind / flatMap)
-let and_then[A, B]: fn(Parser[A], fn(A) -> Parser[B]) -> Parser[B] =
-    fn(pa: Parser[A], f: fn(A) -> Parser[B]) -> Parser[B] {
-        return fn(input: Input) -> ParseResult[B] {
-            match pa(input) {
-                Failure { error: e } => { return Failure { error: e } }
-                Success { value: a, remaining: rest } => {
-                    let pb: Parser[B] = f(a)
-                    return pb(rest)
+/// Run both parsers in sequence, keep the left (first) result.
+pub fn seq_left(pa: fn(Input) -> ParseResult, pb: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match pa(input) {
+            Failure(e) => { return Failure(e) }
+            Success(a, rest1) => {
+                match pb(rest1) {
+                    Failure(e) => { return Failure(e) }
+                    Success(_, rest2) => { return Success(a, rest2) }
                 }
             }
         }
     }
+}
 
-/// Sequence two parsers, keep left result
-let seq_left[A, B]: fn(Parser[A], Parser[B]) -> Parser[A] =
-    fn(pa: Parser[A], pb: Parser[B]) -> Parser[A] {
-        return and_then[A, A](pa, fn(a: A) -> Parser[A] {
-            return and_then[B, A](pb, fn(_: B) -> Parser[A] {
-                return pure[A](a)
-            })
-        })
+/// Run both parsers in sequence, keep the right (second) result.
+pub fn seq_right(pa: fn(Input) -> ParseResult, pb: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match pa(input) {
+            Failure(e) => { return Failure(e) }
+            Success(_, rest1) => {
+                return pb(rest1)
+            }
+        }
     }
+}
 
-/// Sequence two parsers, keep right result
-let seq_right[A, B]: fn(Parser[A], Parser[B]) -> Parser[B] =
-    fn(pa: Parser[A], pb: Parser[B]) -> Parser[B] {
-        return and_then[A, B](pa, fn(_: A) -> Parser[B] {
-            return pb
-        })
+/// Run both parsers in sequence, return VPair(a, b).
+pub fn seq_pair(pa: fn(Input) -> ParseResult, pb: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match pa(input) {
+            Failure(e) => { return Failure(e) }
+            Success(a, rest1) => {
+                match pb(rest1) {
+                    Failure(e) => { return Failure(e) }
+                    Success(b, rest2) => { return Success(VPair(a, b), rest2) }
+                }
+            }
+        }
     }
+}
 
-/// Sequence two parsers, keep both results as tuple
-let seq_pair[A, B]: fn(Parser[A], Parser[B]) -> Parser[(A, B)] =
-    fn(pa: Parser[A], pb: Parser[B]) -> Parser[(A, B)] {
-        return and_then[A, (A, B)](pa, fn(a: A) -> Parser[(A, B)] {
-            return and_then[B, (A, B)](pb, fn(b: B) -> Parser[(A, B)] {
-                return pure[(A, B)]((a, b))
-            })
-        })
-    }
-
-/// Sequence three parsers, keep middle result
-let between[A, B, C]: fn(Parser[A], Parser[B], Parser[C]) -> Parser[B] =
-    fn(open: Parser[A], content: Parser[B], close: Parser[C]) -> Parser[B] {
-        return seq_left[B, C](seq_right[A, B](open, content), close)
-    }
+/// Parse open, then content, then close. Return the content result.
+pub fn between(open: fn(Input) -> ParseResult, content: fn(Input) -> ParseResult, close: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return seq_right(open, seq_left(content, close))
+}
 
 // =============================================================================
 // Alternation Combinators
 // =============================================================================
 
-/// Try first parser, if it fails try second (with error merging)
-let or_else[T]: fn(Parser[T], Parser[T]) -> Parser[T] =
-    fn(p1: Parser[T], p2: Parser[T]) -> Parser[T] {
-        return fn(input: Input) -> ParseResult[T] {
-            match p1(input) {
-                Success { value: v, remaining: r } => {
-                    return Success { value: v, remaining: r }
+/// Try parser p1; if it fails, try p2 from the same input.
+/// Merges errors from both attempts.
+pub fn or_else(p1: fn(Input) -> ParseResult, p2: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match p1(input) {
+            Success(v, rest) => { return Success(v, rest) }
+            Failure(e1) => {
+                match p2(input) {
+                    Success(v, rest) => { return Success(v, rest) }
+                    Failure(e2) => { return Failure(merge_errors(e1, e2)) }
                 }
-                Failure { error: e1 } => {
-                    match p2(input) {
-                        Success { value: v, remaining: r } => {
-                            return Success { value: v, remaining: r }
+            }
+        }
+    }
+}
+
+/// Try each parser in the list, in order. Return the first success.
+/// On total failure, return merged errors.
+pub fn choice(parsers: List[fn(Input) -> ParseResult]) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        var current: List[fn(Input) -> ParseResult] = parsers
+        var last_error: Option[ParseError] = None
+        loop {
+            match current {
+                Nil => {
+                    match last_error {
+                        Some(e) => { return Failure(e) }
+                        None => {
+                            let err: ParseError = error_at(input.pos, Custom("choice: empty parser list"), None)
+                            return Failure(err)
                         }
-                        Failure { error: e2 } => {
-                            return Failure { error: merge_errors(e1, e2) }
+                    }
+                }
+                Cons(p, rest) => {
+                    match p(input) {
+                        Success(v, remaining) => { return Success(v, remaining) }
+                        Failure(e) => {
+                            match last_error {
+                                None => { last_error = Some(e) }
+                                Some(prev) => { last_error = Some(merge_errors(prev, e)) }
+                            }
+                            current = rest
                         }
                     }
                 }
             }
         }
     }
+}
 
-/// Try parsers in order, return first success
-let choice[T]: fn(List[Parser[T]]) -> Parser[T] =
-    fn(parsers: List[Parser[T]]) -> Parser[T] {
-        match parsers {
-            Nil => { return fail[T]("no alternatives") }
-            Cons(p, Nil) => { return p }
-            Cons(p, rest) => { return or_else[T](p, choice[T](rest)) }
+/// Try the parser. On success, return its Value. On failure, succeed with
+/// VVoid without consuming input.
+pub fn optional(parser: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match parser(input) {
+            Success(v, rest) => { return Success(v, rest) }
+            Failure(_) => { return Success(VVoid, input) }
         }
     }
-
-/// Optional parser - returns Option[T]
-let optional[T]: fn(Parser[T]) -> Parser[Option[T]] =
-    fn(parser: Parser[T]) -> Parser[Option[T]] {
-        return or_else[Option[T]](
-            map[T, Option[T]](parser, fn(v: T) -> Option[T] { return Some(v) }),
-            pure[Option[T]](None)
-        )
-    }
+}
 
 // =============================================================================
 // Transformation Combinators
 // =============================================================================
 
-/// Transform parser result (functor map)
-let map[A, B]: fn(Parser[A], fn(A) -> B) -> Parser[B] =
-    fn(parser: Parser[A], f: fn(A) -> B) -> Parser[B] {
-        return fn(input: Input) -> ParseResult[B] {
-            match parser(input) {
-                Failure { error: e } => { return Failure { error: e } }
-                Success { value: a, remaining: rest } => {
-                    return Success { value: f(a), remaining: rest }
+/// Transform the successful result of a parser using function f.
+pub fn map_p(parser: fn(Input) -> ParseResult, f: fn(Value) -> Value) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match parser(input) {
+            Failure(e) => { return Failure(e) }
+            Success(v, rest) => { return Success(f(v), rest) }
+        }
+    }
+}
+
+/// Run two parsers in sequence, combine their results with f.
+pub fn map2(pa: fn(Input) -> ParseResult, pb: fn(Input) -> ParseResult, f: fn(Value, Value) -> Value) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match pa(input) {
+            Failure(e) => { return Failure(e) }
+            Success(a, rest1) => {
+                match pb(rest1) {
+                    Failure(e) => { return Failure(e) }
+                    Success(b, rest2) => { return Success(f(a, b), rest2) }
                 }
             }
         }
     }
+}
 
-/// Transform with two parsers (applicative lift)
-let map2[A, B, C]: fn(Parser[A], Parser[B], fn(A, B) -> C) -> Parser[C] =
-    fn(pa: Parser[A], pb: Parser[B], f: fn(A, B) -> C) -> Parser[C] {
-        return and_then[A, C](pa, fn(a: A) -> Parser[C] {
-            return map[B, C](pb, fn(b: B) -> C {
-                return f(a, b)
-            })
-        })
+/// Run three parsers in sequence, combine their results with f.
+pub fn map3(pa: fn(Input) -> ParseResult, pb: fn(Input) -> ParseResult, pc: fn(Input) -> ParseResult, f: fn(Value, Value, Value) -> Value) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match pa(input) {
+            Failure(e) => { return Failure(e) }
+            Success(a, rest1) => {
+                match pb(rest1) {
+                    Failure(e) => { return Failure(e) }
+                    Success(b, rest2) => {
+                        match pc(rest2) {
+                            Failure(e) => { return Failure(e) }
+                            Success(c, rest3) => { return Success(f(a, b, c), rest3) }
+                        }
+                    }
+                }
+            }
+        }
     }
+}
 
-/// Transform with three parsers
-let map3[A, B, C, D]: fn(Parser[A], Parser[B], Parser[C], fn(A, B, C) -> D) -> Parser[D] =
-    fn(pa: Parser[A], pb: Parser[B], pc: Parser[C], f: fn(A, B, C) -> D) -> Parser[D] {
-        return and_then[A, D](pa, fn(a: A) -> Parser[D] {
-            return and_then[B, D](pb, fn(b: B) -> Parser[D] {
-                return map[C, D](pc, fn(c: C) -> D {
-                    return f(a, b, c)
-                })
-            })
-        })
+/// Run the parser, but replace its successful result with the given constant.
+pub fn replace_p(parser: fn(Input) -> ParseResult, value: Value) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match parser(input) {
+            Failure(e) => { return Failure(e) }
+            Success(_, rest) => { return Success(value, rest) }
+        }
     }
-
-/// Replace successful result with constant
-let replace[A, B]: fn(Parser[A], B) -> Parser[B] =
-    fn(parser: Parser[A], value: B) -> Parser[B] {
-        return map[A, B](parser, fn(_: A) -> B { return value })
-    }
+}
 
 // =============================================================================
 // Repetition Combinators
 // =============================================================================
 
-/// Parse zero or more occurrences
-let many[T]: fn(Parser[T]) -> Parser[List[T]] =
-    fn(parser: Parser[T]) -> Parser[List[T]] {
-        return fn(input: Input) -> ParseResult[List[T]] {
-            var results: List[T] = Nil
-            var current: Input = input
-            loop {
-                match parser(current) {
-                    Failure { error: _ } => {
-                        return Success {
-                            value: reverse[T](results),
-                            remaining: current
-                        }
-                    }
-                    Success { value: v, remaining: rest } => {
-                        results = Cons(v, results)
-                        current = rest
+/// Parse zero or more occurrences. Returns VList of results.
+/// Uses an iterative loop to avoid stack overflow on long inputs.
+pub fn many(parser: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        var results: List[Value] = Nil
+        var current: Input = input
+        loop {
+            match parser(current) {
+                Failure(_) => {
+                    let reversed: List[Value] = std.list.reverse(results)
+                    return Success(VList(reversed), current)
+                }
+                Success(v, rest) => {
+                    results = Cons(v, results)
+                    current = rest
+                }
+            }
+        }
+    }
+}
+
+/// Parse one or more occurrences. Returns VList of results.
+/// Fails if the parser doesn't match at least once.
+pub fn many1(parser: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match parser(input) {
+            Failure(e) => { return Failure(e) }
+            Success(first, rest1) => {
+                let many_parser: fn(Input) -> ParseResult = many(parser)
+                match many_parser(rest1) {
+                    Failure(e) => { return Failure(e) }
+                    Success(rest_val, rest2) => {
+                        let rest_list: List[Value] = unwrap_list(rest_val)
+                        let combined: List[Value] = Cons(first, rest_list)
+                        return Success(VList(combined), rest2)
                     }
                 }
             }
         }
     }
+}
 
-/// Parse one or more occurrences
-let many1[T]: fn(Parser[T]) -> Parser[List[T]] =
-    fn(parser: Parser[T]) -> Parser[List[T]] {
-        return and_then[T, List[T]](parser, fn(first: T) -> Parser[List[T]] {
-            return map[List[T], List[T]](many[T](parser), fn(rest: List[T]) -> List[T] {
-                return Cons(first, rest)
-            })
-        })
-    }
-
-/// Parse exactly n occurrences
-let count[T]: fn(i32, Parser[T]) -> Parser[List[T]] =
-    fn(n: i32, parser: Parser[T]) -> Parser[List[T]] {
-        if n <= 0 {
-            return pure[List[T]](Nil)
+/// Parse exactly n occurrences. Returns VList of results.
+pub fn count_p(n: i32, parser: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        var results: List[Value] = Nil
+        var current: Input = input
+        var i: i32 = 0
+        loop {
+            if i >= n {
+                let reversed: List[Value] = std.list.reverse(results)
+                return Success(VList(reversed), current)
+            }
+            match parser(current) {
+                Failure(e) => { return Failure(e) }
+                Success(v, rest) => {
+                    results = Cons(v, results)
+                    current = rest
+                    i = i + 1
+                }
+            }
         }
-        return and_then[T, List[T]](parser, fn(x: T) -> Parser[List[T]] {
-            return map[List[T], List[T]](count[T](n - 1, parser), fn(xs: List[T]) -> List[T] {
-                return Cons(x, xs)
-            })
-        })
     }
+}
 
-/// Parse separated list (zero or more)
-let sep_by[T, S]: fn(Parser[T], Parser[S]) -> Parser[List[T]] =
-    fn(item: Parser[T], sep: Parser[S]) -> Parser[List[T]] {
-        return or_else[List[T]](sep_by1[T, S](item, sep), pure[List[T]](Nil))
-    }
+// =============================================================================
+// Separated-List Combinators
+// =============================================================================
 
-/// Parse separated list (one or more)
-let sep_by1[T, S]: fn(Parser[T], Parser[S]) -> Parser[List[T]] =
-    fn(item: Parser[T], sep: Parser[S]) -> Parser[List[T]] {
-        return and_then[T, List[T]](item, fn(first: T) -> Parser[List[T]] {
-            let rest_parser: Parser[List[T]] = many[T](seq_right[S, T](sep, item))
-            return map[List[T], List[T]](rest_parser, fn(rest: List[T]) -> List[T] {
-                return Cons(first, rest)
-            })
-        })
+/// Parse zero or more items separated by sep. Returns VList.
+pub fn sep_by(item: fn(Input) -> ParseResult, sep: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        let sep_by1_parser: fn(Input) -> ParseResult = sep_by1(item, sep)
+        match sep_by1_parser(input) {
+            Success(v, rest) => { return Success(v, rest) }
+            Failure(_) => { return Success(VList(Nil), input) }
+        }
     }
+}
 
-/// Parse with ending separator
-let end_by[T, S]: fn(Parser[T], Parser[S]) -> Parser[List[T]] =
-    fn(item: Parser[T], sep: Parser[S]) -> Parser[List[T]] {
-        return many[T](seq_left[T, S](item, sep))
+/// Parse one or more items separated by sep. Returns VList.
+pub fn sep_by1(item: fn(Input) -> ParseResult, sep: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match item(input) {
+            Failure(e) => { return Failure(e) }
+            Success(first, rest1) => {
+                let sep_then_item: fn(Input) -> ParseResult = seq_right(sep, item)
+                let many_parser: fn(Input) -> ParseResult = many(sep_then_item)
+                match many_parser(rest1) {
+                    Failure(e) => { return Failure(e) }
+                    Success(rest_val, rest2) => {
+                        let rest_list: List[Value] = unwrap_list(rest_val)
+                        let combined: List[Value] = Cons(first, rest_list)
+                        return Success(VList(combined), rest2)
+                    }
+                }
+            }
+        }
     }
+}
+
+/// Parse zero or more items each followed by sep. Returns VList.
+pub fn end_by(item: fn(Input) -> ParseResult, sep: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    let item_then_sep: fn(Input) -> ParseResult = seq_left(item, sep)
+    return many(item_then_sep)
+}
 
 // =============================================================================
 // Lookahead and Backtracking
 // =============================================================================
 
-/// Lookahead - succeed if parser succeeds but don't consume input
-let lookahead[T]: fn(Parser[T]) -> Parser[T] =
-    fn(parser: Parser[T]) -> Parser[T] {
-        return fn(input: Input) -> ParseResult[T] {
-            match parser(input) {
-                Failure { error: e } => { return Failure { error: e } }
-                Success { value: v, remaining: _ } => {
-                    return Success { value: v, remaining: input }
-                }
-            }
+/// Succeed with the parser's result but do not consume any input.
+pub fn lookahead(parser: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match parser(input) {
+            Failure(e) => { return Failure(e) }
+            Success(v, _) => { return Success(v, input) }
         }
     }
-
-/// Negative lookahead - succeed if parser fails
-let not_followed_by[T]: fn(Parser[T]) -> Parser[void] =
-    fn(parser: Parser[T]) -> Parser[void] {
-        return fn(input: Input) -> ParseResult[void] {
-            match parser(input) {
-                Success { value: _, remaining: _ } => {
-                    return Failure {
-                        error: error_at(input.pos, Custom("unexpected match"), None)
-                    }
-                }
-                Failure { error: _ } => {
-                    return Success { value: void, remaining: input }
-                }
-            }
-        }
-    }
-
-/// Try parser with full backtracking on failure
-let try_p[T]: fn(Parser[T]) -> Parser[T] =
-    fn(parser: Parser[T]) -> Parser[T] {
-        return fn(input: Input) -> ParseResult[T] {
-            match parser(input) {
-                Success { value: v, remaining: r } => {
-                    return Success { value: v, remaining: r }
-                }
-                Failure { error: e } => {
-                    // Reset position in error to input position
-                    return Failure {
-                        error: ParseError {
-                            position: input.pos,
-                            expected: e.expected,
-                            actual: e.actual,
-                            context: e.context
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-// =============================================================================
-// Error Enhancement
-// =============================================================================
-
-/// Add context label to error messages (replaces expected)
-let label[T]: fn(Parser[T], string) -> Parser[T] =
-    fn(parser: Parser[T], name: string) -> Parser[T] {
-        return fn(input: Input) -> ParseResult[T] {
-            match parser(input) {
-                Success { value: v, remaining: r } => {
-                    return Success { value: v, remaining: r }
-                }
-                Failure { error: e } => {
-                    return Failure {
-                        error: ParseError {
-                            position: e.position,
-                            expected: Cons(Custom(name), Nil),
-                            actual: e.actual,
-                            context: e.context
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-/// Add context to error for debugging (adds to context stack)
-let context[T]: fn(Parser[T], string) -> Parser[T] =
-    fn(parser: Parser[T], ctx: string) -> Parser[T] {
-        return fn(input: Input) -> ParseResult[T] {
-            match parser(input) {
-                Success { value: v, remaining: r } => {
-                    return Success { value: v, remaining: r }
-                }
-                Failure { error: e } => {
-                    return Failure {
-                        error: ParseError {
-                            position: e.position,
-                            expected: e.expected,
-                            actual: e.actual,
-                            context: Cons(ctx, e.context)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-// =============================================================================
-// Recursive Parser Support
-// =============================================================================
-
-/// Delay parser construction for recursion
-type LazyParser[T] = {
-    thunk: fn() -> Parser[T]
 }
 
-/// Create lazy parser - delays construction until parse time
-let lazy[T]: fn(fn() -> Parser[T]) -> Parser[T] =
-    fn(thunk: fn() -> Parser[T]) -> Parser[T] {
-        return fn(input: Input) -> ParseResult[T] {
-            let parser: Parser[T] = thunk()
-            return parser(input)
+/// Succeed with VVoid if the parser fails. Fail if the parser succeeds.
+/// Never consumes input.
+pub fn not_followed_by(parser: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match parser(input) {
+            Success(_, _) => {
+                let err: ParseError = error_at(input.pos, Custom("not followed by"), None)
+                return Failure(err)
+            }
+            Failure(_) => { return Success(VVoid, input) }
         }
     }
+}
 
-/// Fix-point combinator for mutually recursive parsers
-let fix[T]: fn(fn(Parser[T]) -> Parser[T]) -> Parser[T] =
-    fn(f: fn(Parser[T]) -> Parser[T]) -> Parser[T] {
-        return lazy[T](fn() -> Parser[T] {
-            return f(fix[T](f))
-        })
+/// Backtracking parser: if the parser fails, reset the error position to
+/// the original input position so subsequent alternatives can try from there.
+pub fn try_p(parser: fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match parser(input) {
+            Success(v, rest) => { return Success(v, rest) }
+            Failure(e) => {
+                let backtracked: ParseError = ParseError {
+                    position: input.pos,
+                    expected: e.expected,
+                    actual: e.actual,
+                    context: e.context
+                }
+                return Failure(backtracked)
+            }
+        }
     }
+}
+
+// =============================================================================
+// Error Enhancement Combinators
+// =============================================================================
+
+/// Replace the expected field in the error with the given label name.
+pub fn label_p(parser: fn(Input) -> ParseResult, name: string) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match parser(input) {
+            Success(v, rest) => { return Success(v, rest) }
+            Failure(e) => {
+                let labeled: ParseError = ParseError {
+                    position: e.position,
+                    expected: Cons(Custom(name), Nil),
+                    actual: e.actual,
+                    context: e.context
+                }
+                return Failure(labeled)
+            }
+        }
+    }
+}
+
+/// Add a context string to the error's context stack.
+pub fn context_p(parser: fn(Input) -> ParseResult, ctx: string) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        match parser(input) {
+            Success(v, rest) => { return Success(v, rest) }
+            Failure(e) => {
+                let with_ctx: ParseError = ParseError {
+                    position: e.position,
+                    expected: e.expected,
+                    actual: e.actual,
+                    context: Cons(ctx, e.context)
+                }
+                return Failure(with_ctx)
+            }
+        }
+    }
+}
+
+// =============================================================================
+// Deferred Construction
+// =============================================================================
+
+/// Defer parser construction until parse time. Useful for recursive grammars
+/// where the parser would otherwise reference itself before being defined.
+pub fn lazy_p(thunk: fn() -> fn(Input) -> ParseResult) -> fn(Input) -> ParseResult {
+    return fn(input: Input) -> ParseResult {
+        let parser: fn(Input) -> ParseResult = thunk()
+        return parser(input)
+    }
+}

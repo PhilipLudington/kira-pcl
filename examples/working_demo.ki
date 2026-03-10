@@ -1,364 +1,242 @@
-/// Working Parser Combinator Demo
-/// Uses recursion instead of mutable loops (Kira limitation)
+/// Parser Combinator Library Demo
+///
+/// Demonstrates the PCL library's core features:
+/// - Primitive parsers: char_p, digit, letter, string_p
+/// - Combinators: and_then, or_else, many, map_p
+/// - Lexer helpers: identifier, integer, string_literal
+
+import src.types
+import src.primitives
+import src.combinators
+import src.lexer
+import src.io
 
 // =============================================================================
-// Core Types
+// Value Display Helper
 // =============================================================================
 
-type ParseResult[T] =
-    | Success { value: T, remaining: List[char] }
-    | Failure { message: string }
-
-type Parser[T] = fn(List[char]) -> ParseResult[T]
-
-// =============================================================================
-// List Helpers (using recursion)
-// =============================================================================
-
-let reverse_chars: fn(List[char]) -> List[char] = fn(list: List[char]) -> List[char] {
-    return reverse_chars_acc(list, Nil)
-}
-
-let reverse_chars_acc: fn(List[char], List[char]) -> List[char] = fn(list: List[char], acc: List[char]) -> List[char] {
-    match list {
-        Nil => { return acc }
-        Cons(head, tail) => { return reverse_chars_acc(tail, Cons(head, acc)) }
-    }
-}
-
-let list_length_chars: fn(List[char]) -> i32 = fn(list: List[char]) -> i32 {
-    match list {
-        Nil => { return 0 }
-        Cons(_, tail) => { return 1 + list_length_chars(tail) }
-    }
-}
-
-let chars_to_string: fn(List[char]) -> string = fn(chars: List[char]) -> string {
-    match chars {
-        Nil => { return "" }
-        Cons(c, rest) => { return to_string(c) + chars_to_string(rest) }
+fn show_value(v: Value) -> string {
+    match v {
+        VChar(c) => { return "'" + to_string(c) + "'" }
+        VString(s) => { return "\"" + s + "\"" }
+        VInt(n) => { return to_string(n) }
+        VFloat(f) => { return to_string(f) }
+        VBool(b) => { return to_string(b) }
+        VVoid => { return "()" }
+        VList(_) => { return "[...]" }
+        VPair(a, b) => { return "(" + show_value(a) + ", " + show_value(b) + ")" }
     }
 }
 
 // =============================================================================
-// Basic Parsers
+// Result Display Helper
 // =============================================================================
 
-/// Parse any single character
-let any_char: fn() -> Parser[char] = fn() -> Parser[char] {
-    return fn(input: List[char]) -> ParseResult[char] {
-        match input {
-            Nil => {
-                return Failure { message: "unexpected end of input" }
-            }
-            Cons(c, rest) => {
-                return Success { value: c, remaining: rest }
-            }
+effect fn show_result(label: string, result: ParseResult) -> void {
+    match result {
+        Success(v, remaining) => {
+            let rest: string = remaining_from(remaining.source, remaining.pos.offset)
+            std.io.println("  " + label + " => " + show_value(v) + "  (remaining: \"" + rest + "\")")
+        }
+        Failure(e) => {
+            std.io.println("  " + label + " => FAIL: " + format_parse_error(e))
         }
     }
+    return
 }
 
-/// Parse a specific character
-let char_p: fn(char) -> Parser[char] = fn(expected: char) -> Parser[char] {
-    return fn(input: List[char]) -> ParseResult[char] {
-        match input {
-            Nil => {
-                return Failure { message: "unexpected end of input, expected '" + to_string(expected) + "'" }
-            }
-            Cons(c, rest) => {
-                if c == expected {
-                    return Success { value: c, remaining: rest }
-                }
-                return Failure { message: "expected '" + to_string(expected) + "', got '" + to_string(c) + "'" }
-            }
+effect fn show_parse(label: string, result: Result[Value, ParseError]) -> void {
+    match result {
+        Ok(v) => {
+            std.io.println("  " + label + " => " + show_value(v))
+        }
+        Err(e) => {
+            std.io.println("  " + label + " => FAIL: " + format_parse_error(e))
         }
     }
-}
-
-/// Parser that always succeeds with given value
-let pure[T]: fn(T) -> Parser[T] = fn(value: T) -> Parser[T] {
-    return fn(input: List[char]) -> ParseResult[T] {
-        return Success { value: value, remaining: input }
-    }
-}
-
-/// Parser that always fails
-let fail[T]: fn(string) -> Parser[T] = fn(message: string) -> Parser[T] {
-    return fn(input: List[char]) -> ParseResult[T] {
-        return Failure { message: message }
-    }
-}
-
-// =============================================================================
-// Combinators
-// =============================================================================
-
-/// Sequence two parsers (monadic bind)
-let and_then[A, B]: fn(Parser[A], fn(A) -> Parser[B]) -> Parser[B] = fn(pa: Parser[A], f: fn(A) -> Parser[B]) -> Parser[B] {
-    return fn(input: List[char]) -> ParseResult[B] {
-        match pa(input) {
-            Failure { message: m } => { return Failure { message: m } }
-            Success { value: a, remaining: rest } => {
-                let pb: Parser[B] = f(a)
-                return pb(rest)
-            }
-        }
-    }
-}
-
-/// Try first parser, then second if it fails
-let or_else[T]: fn(Parser[T], Parser[T]) -> Parser[T] = fn(p1: Parser[T], p2: Parser[T]) -> Parser[T] {
-    return fn(input: List[char]) -> ParseResult[T] {
-        match p1(input) {
-            Success { value: v, remaining: r } => {
-                return Success { value: v, remaining: r }
-            }
-            Failure { message: _ } => {
-                return p2(input)
-            }
-        }
-    }
-}
-
-/// Transform parser result (functor map)
-let map[A, B]: fn(Parser[A], fn(A) -> B) -> Parser[B] = fn(parser: Parser[A], f: fn(A) -> B) -> Parser[B] {
-    return fn(input: List[char]) -> ParseResult[B] {
-        match parser(input) {
-            Failure { message: m } => { return Failure { message: m } }
-            Success { value: a, remaining: rest } => {
-                return Success { value: f(a), remaining: rest }
-            }
-        }
-    }
-}
-
-/// Parse zero or more (using recursion)
-let many[T]: fn(Parser[T]) -> Parser[List[T]] = fn(parser: Parser[T]) -> Parser[List[T]] {
-    return fn(input: List[char]) -> ParseResult[List[T]] {
-        return many_acc[T](parser, input, Nil)
-    }
-}
-
-let many_acc[T]: fn(Parser[T], List[char], List[T]) -> ParseResult[List[T]] = fn(parser: Parser[T], input: List[char], acc: List[T]) -> ParseResult[List[T]] {
-    match parser(input) {
-        Failure { message: _ } => {
-            return Success { value: reverse_list[T](acc), remaining: input }
-        }
-        Success { value: v, remaining: rest } => {
-            return many_acc[T](parser, rest, Cons(v, acc))
-        }
-    }
-}
-
-let reverse_list[T]: fn(List[T]) -> List[T] = fn(list: List[T]) -> List[T] {
-    return reverse_list_acc[T](list, Nil)
-}
-
-let reverse_list_acc[T]: fn(List[T], List[T]) -> List[T] = fn(list: List[T], acc: List[T]) -> List[T] {
-    match list {
-        Nil => { return acc }
-        Cons(head, tail) => { return reverse_list_acc[T](tail, Cons(head, acc)) }
-    }
-}
-
-/// Parse one or more
-let many1[T]: fn(Parser[T]) -> Parser[List[T]] = fn(parser: Parser[T]) -> Parser[List[T]] {
-    return and_then[T, List[T]](parser, fn(first: T) -> Parser[List[T]] {
-        return map[List[T], List[T]](many[T](parser), fn(rest: List[T]) -> List[T] {
-            return Cons(first, rest)
-        })
-    })
-}
-
-// =============================================================================
-// Character Class Parsers
-// =============================================================================
-
-let is_digit: fn(char) -> bool = fn(c: char) -> bool {
-    return c >= '0' and c <= '9'
-}
-
-let is_letter: fn(char) -> bool = fn(c: char) -> bool {
-    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z')
-}
-
-let is_whitespace: fn(char) -> bool = fn(c: char) -> bool {
-    return c == ' ' or c == '\t' or c == '\n' or c == '\r'
-}
-
-let satisfy: fn(fn(char) -> bool, string) -> Parser[char] = fn(pred: fn(char) -> bool, desc: string) -> Parser[char] {
-    return fn(input: List[char]) -> ParseResult[char] {
-        match input {
-            Nil => {
-                return Failure { message: "unexpected end of input, expected " + desc }
-            }
-            Cons(c, rest) => {
-                if pred(c) {
-                    return Success { value: c, remaining: rest }
-                }
-                return Failure { message: "expected " + desc + ", got '" + to_string(c) + "'" }
-            }
-        }
-    }
-}
-
-let digit: fn() -> Parser[char] = fn() -> Parser[char] {
-    return satisfy(is_digit, "digit")
-}
-
-let letter: fn() -> Parser[char] = fn() -> Parser[char] {
-    return satisfy(is_letter, "letter")
-}
-
-let whitespace: fn() -> Parser[char] = fn() -> Parser[char] {
-    return satisfy(is_whitespace, "whitespace")
-}
-
-// =============================================================================
-// String Conversion (using effect for iteration)
-// =============================================================================
-
-effect fn string_to_chars(s: string) -> IO[List[char]] {
-    return string_to_chars_loop(s, Nil)
-}
-
-effect fn string_to_chars_loop(s: string, acc: List[char]) -> IO[List[char]] {
-    // Use for loop to iterate, accumulate reversed, then reverse
-    var result: List[char] = acc
-    for c in s {
-        result = Cons(c, result)
-    }
-    return reverse_chars(result)
+    return
 }
 
 // =============================================================================
 // Main Demo
 // =============================================================================
 
-effect fn main() -> IO[void] {
-    println("Parser Combinator Library Demo")
-    println("==============================")
-    println("")
+effect fn main() -> void {
+    std.io.println("=== Parser Combinator Library Demo ===")
+    std.io.println("")
 
-    // Convert test strings to char lists
-    let hello: List[char] = string_to_chars("Hello")
-    let digits_abc: List[char] = string_to_chars("123abc")
-    let abc: List[char] = string_to_chars("abc")
-    let foo123: List[char] = string_to_chars("foo123 bar")
-    let spaces: List[char] = string_to_chars("   hello")
+    // -------------------------------------------------------------------------
+    // Section 1: Basic Character Parsers
+    // -------------------------------------------------------------------------
+    std.io.println("--- 1. Basic Character Parsers ---")
+    std.io.println("")
 
-    // Test 1: Parse single character
-    println("Test 1: Parse 'H' from \"Hello\"")
-    let result1: ParseResult[char] = char_p('H')(hello)
-    print_char_result(result1)
-    println("")
+    // char_p: parse a specific character
+    std.io.println("char_p('H') on \"Hello\":")
+    show_result("char_p('H')", run(char_p('H'), "Hello"))
 
-    // Test 2: Parse fails on wrong character
-    println("Test 2: Parse 'X' from \"Hello\" (should fail)")
-    let result2: ParseResult[char] = char_p('X')(hello)
-    print_char_result(result2)
-    println("")
+    std.io.println("char_p('X') on \"Hello\" (should fail):")
+    show_result("char_p('X')", run(char_p('X'), "Hello"))
 
-    // Test 3: Parse multiple characters with and_then
-    println("Test 3: Parse \"He\" using and_then")
-    let he_parser: Parser[(char, char)] = and_then[char, (char, char)](char_p('H'), fn(h: char) -> Parser[(char, char)] {
-        return map[char, (char, char)](char_p('e'), fn(e: char) -> (char, char) {
-            return (h, e)
+    // digit: parse a single digit
+    std.io.println("digit() on \"7abc\":")
+    show_result("digit()", run(digit(), "7abc"))
+
+    std.io.println("digit() on \"abc\" (should fail):")
+    show_result("digit()", run(digit(), "abc"))
+
+    // letter: parse a single letter
+    std.io.println("letter() on \"hello\":")
+    show_result("letter()", run(letter(), "hello"))
+
+    // string_p: parse an exact string
+    std.io.println("string_p(\"let\") on \"let x = 1\":")
+    show_result("string_p(\"let\")", run(string_p("let"), "let x = 1"))
+
+    std.io.println("string_p(\"var\") on \"let x\" (should fail):")
+    show_result("string_p(\"var\")", run(string_p("var"), "let x"))
+
+    std.io.println("")
+
+    // -------------------------------------------------------------------------
+    // Section 2: Combinators
+    // -------------------------------------------------------------------------
+    std.io.println("--- 2. Combinators ---")
+    std.io.println("")
+
+    // and_then: sequence two parsers
+    std.io.println("and_then: parse 'H' then 'e' from \"Hello\":")
+    let he_parser: fn(Input) -> ParseResult = and_then(char_p('H'), fn(h: Value) -> fn(Input) -> ParseResult {
+        return map_p(char_p('e'), fn(e: Value) -> Value {
+            return VPair(h, e)
         })
     })
-    let result3: ParseResult[(char, char)] = he_parser(hello)
-    match result3 {
-        Success { value: pair, remaining: _ } => {
-            let (c1, c2): (char, char) = pair
-            println("  Success: parsed '" + to_string(c1) + to_string(c2) + "'")
-        }
-        Failure { message: m } => {
-            println("  Failure: " + m)
-        }
-    }
-    println("")
+    show_result("and_then(H, e)", run(he_parser, "Hello"))
 
-    // Test 4: Parse with or_else
-    println("Test 4: Parse 'a' or 'H' from \"Hello\"")
-    let a_or_h: Parser[char] = or_else[char](char_p('a'), char_p('H'))
-    let result4: ParseResult[char] = a_or_h(hello)
-    print_char_result(result4)
-    println("")
+    // or_else: try alternatives
+    std.io.println("or_else: parse 'a' or 'H' from \"Hello\":")
+    let a_or_h: fn(Input) -> ParseResult = or_else(char_p('a'), char_p('H'))
+    show_result("or_else('a', 'H')", run(a_or_h, "Hello"))
 
-    // Test 5: Parse many digits
-    println("Test 5: Parse digits from \"123abc\"")
-    let result5: ParseResult[List[char]] = many[char](digit())(digits_abc)
-    match result5 {
-        Success { value: chars, remaining: rest } => {
-            println("  Success: parsed " + to_string(list_length_chars(chars)) + " digits: \"" + chars_to_string(chars) + "\"")
-            println("  Remaining: " + to_string(list_length_chars(rest)) + " chars")
-        }
-        Failure { message: m } => {
-            println("  Failure: " + m)
-        }
-    }
-    println("")
+    // many: zero or more
+    std.io.println("many(digit()) on \"123abc\":")
+    show_result("many(digit())", run(many(digit()), "123abc"))
 
-    // Test 6: Parse many1 requires at least one
-    println("Test 6: Parse many1 digits from \"abc\" (should fail)")
-    let result6: ParseResult[List[char]] = many1[char](digit())(abc)
-    match result6 {
-        Success { value: chars, remaining: _ } => {
-            println("  Success: parsed " + to_string(list_length_chars(chars)) + " digits")
-        }
-        Failure { message: m } => {
-            println("  Failure: " + m)
-        }
-    }
-    println("")
+    std.io.println("many(digit()) on \"abc\" (zero matches is ok):")
+    show_result("many(digit())", run(many(digit()), "abc"))
 
-    // Test 7: Parse identifier (letter followed by letters/digits)
-    println("Test 7: Parse identifier from \"foo123 bar\"")
-    let ident_parser: Parser[string] = and_then[char, string](letter(), fn(first: char) -> Parser[string] {
-        let rest_char: Parser[char] = or_else[char](letter(), digit())
-        return map[List[char], string](many[char](rest_char), fn(rest: List[char]) -> string {
-            return to_string(first) + chars_to_string(rest)
-        })
+    // many1: one or more
+    std.io.println("many1(digit()) on \"456xyz\":")
+    show_result("many1(digit())", run(many1(digit()), "456xyz"))
+
+    std.io.println("many1(digit()) on \"abc\" (should fail):")
+    show_result("many1(digit())", run(many1(digit()), "abc"))
+
+    // map_p: transform results
+    std.io.println("map_p: parse digit and convert to string:")
+    let digit_as_str: fn(Input) -> ParseResult = map_p(digit(), fn(v: Value) -> Value {
+        let c: char = unwrap_char(v)
+        return VString(to_string(c))
     })
-    let result7: ParseResult[string] = ident_parser(foo123)
-    match result7 {
-        Success { value: id, remaining: rest } => {
-            println("  Success: parsed identifier \"" + id + "\"")
-            println("  Remaining: " + to_string(list_length_chars(rest)) + " chars")
-        }
-        Failure { message: m } => {
-            println("  Failure: " + m)
-        }
-    }
-    println("")
+    show_result("map_p(digit(), to_str)", run(digit_as_str, "5rest"))
 
-    // Test 8: Skip whitespace
-    println("Test 8: Skip whitespace from \"   hello\"")
-    let skip_ws: Parser[List[char]] = many[char](whitespace())
-    let result8: ParseResult[List[char]] = skip_ws(spaces)
-    match result8 {
-        Success { value: ws, remaining: rest } => {
-            println("  Success: skipped " + to_string(list_length_chars(ws)) + " whitespace chars")
-            println("  Remaining: " + to_string(list_length_chars(rest)) + " chars")
-        }
-        Failure { message: m } => {
-            println("  Failure: " + m)
-        }
-    }
-    println("")
+    // seq_pair: pair two results
+    std.io.println("seq_pair: parse letter then digit:")
+    let letter_digit: fn(Input) -> ParseResult = seq_pair(letter(), digit())
+    show_result("seq_pair(letter, digit)", run(letter_digit, "a1rest"))
 
-    println("Demo complete!")
-    return
-}
+    // between: parse between delimiters
+    std.io.println("between: parse digits inside parens:")
+    let parens_digit: fn(Input) -> ParseResult = between(char_p('('), digit(), char_p(')'))
+    show_result("between('(', digit, ')')", run(parens_digit, "(7)rest"))
 
-effect fn print_char_result(result: ParseResult[char]) -> IO[void] {
-    match result {
-        Success { value: c, remaining: _ } => {
-            println("  Success: parsed '" + to_string(c) + "'")
+    // choice: try many alternatives
+    std.io.println("choice: parse keyword 'if', 'let', or 'fn':")
+    let kw: fn(Input) -> ParseResult = choice(Cons(
+        string_p("if"),
+        Cons(string_p("let"), Cons(string_p("fn"), Nil))
+    ))
+    show_result("choice(if|let|fn)", run(kw, "let x"))
+
+    std.io.println("")
+
+    // -------------------------------------------------------------------------
+    // Section 3: Lexer Helpers
+    // -------------------------------------------------------------------------
+    std.io.println("--- 3. Lexer Helpers ---")
+    std.io.println("")
+
+    // identifier: letter followed by alphanumerics, with trailing whitespace
+    std.io.println("identifier() on \"foo123 bar\":")
+    show_result("identifier()", run(identifier(), "foo123 bar"))
+
+    std.io.println("identifier() on \"myVar = 10\":")
+    show_result("identifier()", run(identifier(), "myVar = 10"))
+
+    // integer: one or more digits as VInt
+    std.io.println("integer() on \"42 + 1\":")
+    show_result("integer()", run(integer(), "42 + 1"))
+
+    std.io.println("integer() on \"9999\":")
+    show_result("integer()", run(integer(), "9999"))
+
+    // signed_integer: optional sign
+    std.io.println("signed_integer() on \"-17 rest\":")
+    show_result("signed_integer()", run(signed_integer(), "-17 rest"))
+
+    // string_literal: quoted string with escapes
+    std.io.println("string_literal() on '\"hello world\" rest':")
+    show_result("string_literal()", run(string_literal(), "\"hello world\" rest"))
+
+    std.io.println("string_literal() on '\"line\\\\none\" rest' (escape):")
+    show_result("string_literal()", run(string_literal(), "\"line\\none\" rest"))
+
+    // keyword: exact match not followed by alphanumeric
+    std.io.println("keyword(\"if\") on \"if (x)\":")
+    show_result("keyword(\"if\")", run(keyword("if"), "if (x)"))
+
+    std.io.println("keyword(\"if\") on \"iffy\" (should fail):")
+    show_result("keyword(\"if\")", run(keyword("if"), "iffy"))
+
+    // symbol: exact string with trailing whitespace
+    std.io.println("symbol(\"==\") on \"== true\":")
+    show_result("symbol(\"==\")", run(symbol("=="), "== true"))
+
+    std.io.println("")
+
+    // -------------------------------------------------------------------------
+    // Section 4: Combining It All
+    // -------------------------------------------------------------------------
+    std.io.println("--- 4. Combining It All ---")
+    std.io.println("")
+
+    // Parse a simple assignment: identifier = integer
+    std.io.println("Parse assignment 'x = 42':")
+    let assign_parser: fn(Input) -> ParseResult = and_then(
+        identifier(),
+        fn(name_v: Value) -> fn(Input) -> ParseResult {
+            return and_then(
+                symbol("="),
+                fn(_eq: Value) -> fn(Input) -> ParseResult {
+                    return map_p(integer(), fn(val_v: Value) -> Value {
+                        return VPair(name_v, val_v)
+                    })
+                }
+            )
         }
-        Failure { message: m } => {
-            println("  Failure: " + m)
-        }
-    }
-    return
+    )
+    show_parse("parse(x = 42)", parse(assign_parser, "x = 42"))
+
+    // Parse a comma-separated list of identifiers
+    std.io.println("Parse comma-separated ids 'foo, bar, baz':")
+    let id_list: fn(Input) -> ParseResult = comma_sep1(identifier())
+    show_parse("parse(foo, bar, baz)", parse(id_list, "foo, bar, baz"))
+
+    // Parse bracketed integer list
+    std.io.println("Parse bracketed ints '[1, 2, 3]':")
+    let int_list: fn(Input) -> ParseResult = brackets(comma_sep(integer()))
+    show_parse("parse([1, 2, 3])", parse(int_list, "[1, 2, 3]"))
+
+    std.io.println("")
+    std.io.println("=== Demo Complete ===")
 }

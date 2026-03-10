@@ -1,300 +1,146 @@
-/// Calculator Example
-///
-/// A complete arithmetic expression parser and evaluator using the
-/// Parser Combinator Library. Demonstrates expression parsing with
-/// operator precedence and associativity.
+// Calculator Example
+//
+// A complete arithmetic expression parser and evaluator using the
+// monomorphic Parser Combinator Library. Demonstrates direct evaluation
+// with operator precedence, associativity, unary negation, and
+// parenthesized subexpressions.
+//
+// Supported operators (by precedence, highest first):
+//   - Unary negation: -expr
+//   - Multiplicative: *, /, %  (left-associative)
+//   - Additive: +, -           (left-associative)
 
 import src.types
 import src.primitives
 import src.combinators
 import src.lexer
 import src.expr
+import src.io
 
 // =============================================================================
-// Expression AST
+// Expression Parsers (Direct Evaluation)
 // =============================================================================
 
-/// Arithmetic expression representation
-type Expr =
-    | Literal(i64)
-    | Add(Expr, Expr)
-    | Sub(Expr, Expr)
-    | Mul(Expr, Expr)
-    | Div(Expr, Expr)
-    | Mod(Expr, Expr)
-    | Neg(Expr)
-    | Parens(Expr)
-
-// =============================================================================
-// Expression Parsers
-// =============================================================================
-
-/// Forward declaration for recursive parsing
-let expr: fn() -> Parser[Expr]
-
-/// Parse integer literal
-let literal: fn() -> Parser[Expr] = fn() -> Parser[Expr] {
-    return map[i64, Expr](integer(), fn(n: i64) -> Expr {
-        return Literal(n)
+// Forward-declared recursive parser for full expressions.
+// Returns VInt with the computed result.
+fn expr_parser() -> fn(Input) -> ParseResult {
+    let mul_op: Operator = infixl_op(symbol("*"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) * unwrap_int(b))
     })
+    let div_op: Operator = infixl_op(symbol("/"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) / unwrap_int(b))
+    })
+    let mod_op: Operator = infixl_op(symbol("%"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) % unwrap_int(b))
+    })
+    let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) + unwrap_int(b))
+    })
+    let sub_op: Operator = infixl_op(symbol("-"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) - unwrap_int(b))
+    })
+
+    // Precedence table: highest precedence first
+    let mul_level: List[Operator] = Cons(mul_op, Cons(div_op, Cons(mod_op, Nil)))
+    let add_level: List[Operator] = Cons(add_op, Cons(sub_op, Nil))
+    let table: List[List[Operator]] = Cons(mul_level, Cons(add_level, Nil))
+
+    return build_expr_parser(table, factor())
 }
 
-/// Parse parenthesized expression
-let paren_expr: fn() -> Parser[Expr] = fn() -> Parser[Expr] {
-    return map[Expr, Expr](
-        between[string, Expr, string](symbol("("), lazy[Expr](expr), symbol(")")),
-        fn(e: Expr) -> Expr { return Parens(e) }
+// Parse a factor: unary negation, parenthesized expression, or integer literal.
+// Each alternative produces a VInt result.
+fn factor() -> fn(Input) -> ParseResult {
+    let neg: fn(Input) -> ParseResult = map_p(
+        seq_right(
+            symbol("-"),
+            lazy_p(fn() -> fn(Input) -> ParseResult { return factor() })
+        ),
+        fn(v: Value) -> Value {
+            return VInt(0i64 - unwrap_int(v))
+        }
     )
-}
 
-/// Parse unary negation
-let negation: fn() -> Parser[Expr] = fn() -> Parser[Expr] {
-    return map[Expr, Expr](
-        seq_right[string, Expr](symbol("-"), lazy[Expr](fn() -> Parser[Expr] { return factor() })),
-        fn(e: Expr) -> Expr { return Neg(e) }
+    let paren: fn(Input) -> ParseResult = parens(
+        lazy_p(fn() -> fn(Input) -> ParseResult { return expr_parser() })
     )
-}
 
-/// Parse unary plus (identity)
-let positive: fn() -> Parser[Expr] = fn() -> Parser[Expr] {
-    return seq_right[string, Expr](symbol("+"), lazy[Expr](fn() -> Parser[Expr] { return factor() }))
-}
+    let lit: fn(Input) -> ParseResult = integer()
 
-/// Parse factor (atom with optional unary operators)
-let factor: fn() -> Parser[Expr] = fn() -> Parser[Expr] {
-    return choice[Expr](Cons(
-        negation(),
-        Cons(
-            positive(),
-            Cons(
-                paren_expr(),
-                Cons(
-                    literal(),
-                    Nil
-                )
-            )
-        )
-    ))
-}
-
-/// Parse term with * / % operators (highest precedence binary)
-let term: fn() -> Parser[Expr] = fn() -> Parser[Expr] {
-    let mul_op: Parser[fn(Expr, Expr) -> Expr] = replace[string, fn(Expr, Expr) -> Expr](
-        symbol("*"),
-        fn(a: Expr, b: Expr) -> Expr { return Mul(a, b) }
-    )
-    let div_op: Parser[fn(Expr, Expr) -> Expr] = replace[string, fn(Expr, Expr) -> Expr](
-        symbol("/"),
-        fn(a: Expr, b: Expr) -> Expr { return Div(a, b) }
-    )
-    let mod_op: Parser[fn(Expr, Expr) -> Expr] = replace[string, fn(Expr, Expr) -> Expr](
-        symbol("%"),
-        fn(a: Expr, b: Expr) -> Expr { return Mod(a, b) }
-    )
-    let ops: Parser[fn(Expr, Expr) -> Expr] = choice[fn(Expr, Expr) -> Expr](Cons(
-        mul_op,
-        Cons(div_op, Cons(mod_op, Nil))
-    ))
-    return chainl1[Expr](factor(), ops)
-}
-
-/// Parse expression with + - operators (lowest precedence binary)
-let expr: fn() -> Parser[Expr] = fn() -> Parser[Expr] {
-    let add_op: Parser[fn(Expr, Expr) -> Expr] = replace[string, fn(Expr, Expr) -> Expr](
-        symbol("+"),
-        fn(a: Expr, b: Expr) -> Expr { return Add(a, b) }
-    )
-    let sub_op: Parser[fn(Expr, Expr) -> Expr] = replace[string, fn(Expr, Expr) -> Expr](
-        symbol("-"),
-        fn(a: Expr, b: Expr) -> Expr { return Sub(a, b) }
-    )
-    let ops: Parser[fn(Expr, Expr) -> Expr] = or_else[fn(Expr, Expr) -> Expr](add_op, sub_op)
-    return chainl1[Expr](term(), ops)
+    return choice(Cons(neg, Cons(paren, Cons(lit, Nil))))
 }
 
 // =============================================================================
 // Public API
 // =============================================================================
 
-/// Parse expression from string
-pub let parse_expr: fn(string) -> Result[Expr, ParseError] =
-    fn(source: string) -> Result[Expr, ParseError] {
-        let parser: Parser[Expr] = seq_left[Expr, void](
-            seq_right[void, Expr](skip_ws(), expr()),
-            eof()
-        )
-        return parse[Expr](parser, source)
-    }
-
-/// Evaluate expression to i64
-pub let eval: fn(Expr) -> i64 = fn(e: Expr) -> i64 {
-    match e {
-        Literal(n) => { return n }
-        Add(a, b) => { return eval(a) + eval(b) }
-        Sub(a, b) => { return eval(a) - eval(b) }
-        Mul(a, b) => { return eval(a) * eval(b) }
-        Div(a, b) => { return eval(a) / eval(b) }
-        Mod(a, b) => { return eval(a) % eval(b) }
-        Neg(a) => { return -eval(a) }
-        Parens(a) => { return eval(a) }
-    }
-}
-
-/// Parse and evaluate expression
-pub let calculate: fn(string) -> Result[i64, ParseError] =
-    fn(source: string) -> Result[i64, ParseError] {
-        match parse_expr(source) {
-            Ok(e) => { return Ok(eval(e)) }
-            Err(err) => { return Err(err) }
-        }
-    }
-
-// =============================================================================
-// Expression Pretty Printing
-// =============================================================================
-
-/// Convert expression to string representation
-pub let expr_to_string: fn(Expr) -> string = fn(e: Expr) -> string {
-    match e {
-        Literal(n) => { return std.i64.to_string(n) }
-        Add(a, b) => {
-            return std.string.concat(
-                std.string.concat("(", expr_to_string(a)),
-                std.string.concat(" + ", std.string.concat(expr_to_string(b), ")"))
-            )
-        }
-        Sub(a, b) => {
-            return std.string.concat(
-                std.string.concat("(", expr_to_string(a)),
-                std.string.concat(" - ", std.string.concat(expr_to_string(b), ")"))
-            )
-        }
-        Mul(a, b) => {
-            return std.string.concat(
-                std.string.concat("(", expr_to_string(a)),
-                std.string.concat(" * ", std.string.concat(expr_to_string(b), ")"))
-            )
-        }
-        Div(a, b) => {
-            return std.string.concat(
-                std.string.concat("(", expr_to_string(a)),
-                std.string.concat(" / ", std.string.concat(expr_to_string(b), ")"))
-            )
-        }
-        Mod(a, b) => {
-            return std.string.concat(
-                std.string.concat("(", expr_to_string(a)),
-                std.string.concat(" % ", std.string.concat(expr_to_string(b), ")"))
-            )
-        }
-        Neg(a) => {
-            return std.string.concat("(-", std.string.concat(expr_to_string(a), ")"))
-        }
-        Parens(a) => {
-            return std.string.concat("(", std.string.concat(expr_to_string(a), ")"))
-        }
-    }
+// Parse and evaluate an arithmetic expression from a source string.
+// Returns Ok(VInt(result)) on success, or Err(ParseError) on failure.
+pub fn calculate(source: string) -> Result[Value, ParseError] {
+    let p: fn(Input) -> ParseResult = seq_left(
+        seq_right(skip_ws(), expr_parser()),
+        eof()
+    )
+    return parse(p, source)
 }
 
 // =============================================================================
-// Expression Analysis
+// Demo
 // =============================================================================
 
-/// Count number of operations in expression
-pub let count_ops: fn(Expr) -> i32 = fn(e: Expr) -> i32 {
-    match e {
-        Literal(_) => { return 0 }
-        Add(a, b) => { return 1 + count_ops(a) + count_ops(b) }
-        Sub(a, b) => { return 1 + count_ops(a) + count_ops(b) }
-        Mul(a, b) => { return 1 + count_ops(a) + count_ops(b) }
-        Div(a, b) => { return 1 + count_ops(a) + count_ops(b) }
-        Mod(a, b) => { return 1 + count_ops(a) + count_ops(b) }
-        Neg(a) => { return 1 + count_ops(a) }
-        Parens(a) => { return count_ops(a) }
+effect fn run_calc(label: string, input: string) -> void {
+    match calculate(input) {
+        Ok(v) => {
+            std.io.println("  " + label + " = " + to_string(unwrap_int(v)))
+        }
+        Err(e) => {
+            std.io.println("  " + label + " = ERROR: " + format_parse_error(e))
+        }
     }
+    return
 }
 
-/// Get depth of expression tree
-pub let expr_depth: fn(Expr) -> i32 = fn(e: Expr) -> i32 {
-    match e {
-        Literal(_) => { return 1 }
-        Add(a, b) => { return 1 + max(expr_depth(a), expr_depth(b)) }
-        Sub(a, b) => { return 1 + max(expr_depth(a), expr_depth(b)) }
-        Mul(a, b) => { return 1 + max(expr_depth(a), expr_depth(b)) }
-        Div(a, b) => { return 1 + max(expr_depth(a), expr_depth(b)) }
-        Mod(a, b) => { return 1 + max(expr_depth(a), expr_depth(b)) }
-        Neg(a) => { return 1 + expr_depth(a) }
-        Parens(a) => { return 1 + expr_depth(a) }
-    }
-}
+effect fn main() -> void {
+    std.io.println("=== Calculator Demo ===")
+    std.io.println("")
 
-/// Maximum of two integers
-let max: fn(i32, i32) -> i32 = fn(a: i32, b: i32) -> i32 {
-    if a > b {
-        return a
-    }
-    return b
-}
+    std.io.println("Basic arithmetic:")
+    run_calc("1 + 2", "1 + 2")
+    run_calc("10 - 3", "10 - 3")
+    run_calc("4 * 5", "4 * 5")
+    run_calc("20 / 4", "20 / 4")
+    run_calc("17 % 5", "17 % 5")
+    std.io.println("")
 
-/// Check if expression is a simple literal
-pub let is_literal: fn(Expr) -> bool = fn(e: Expr) -> bool {
-    match e {
-        Literal(_) => { return true }
-        _ => { return false }
-    }
-}
+    std.io.println("Operator precedence (* before +):")
+    run_calc("2 + 3 * 4", "2 + 3 * 4")
+    run_calc("2 * 3 + 4", "2 * 3 + 4")
+    run_calc("10 - 2 * 3", "10 - 2 * 3")
+    std.io.println("")
 
-/// Simplify expression (basic constant folding)
-pub let simplify: fn(Expr) -> Expr = fn(e: Expr) -> Expr {
-    match e {
-        Literal(n) => { return Literal(n) }
-        Parens(a) => { return simplify(a) }
-        Neg(a) => {
-            let sa: Expr = simplify(a)
-            match sa {
-                Literal(n) => { return Literal(-n) }
-                _ => { return Neg(sa) }
-            }
-        }
-        Add(a, b) => {
-            let sa: Expr = simplify(a)
-            let sb: Expr = simplify(b)
-            match (sa, sb) {
-                (Literal(na), Literal(nb)) => { return Literal(na + nb) }
-                _ => { return Add(sa, sb) }
-            }
-        }
-        Sub(a, b) => {
-            let sa: Expr = simplify(a)
-            let sb: Expr = simplify(b)
-            match (sa, sb) {
-                (Literal(na), Literal(nb)) => { return Literal(na - nb) }
-                _ => { return Sub(sa, sb) }
-            }
-        }
-        Mul(a, b) => {
-            let sa: Expr = simplify(a)
-            let sb: Expr = simplify(b)
-            match (sa, sb) {
-                (Literal(na), Literal(nb)) => { return Literal(na * nb) }
-                _ => { return Mul(sa, sb) }
-            }
-        }
-        Div(a, b) => {
-            let sa: Expr = simplify(a)
-            let sb: Expr = simplify(b)
-            match (sa, sb) {
-                (Literal(na), Literal(nb)) => { return Literal(na / nb) }
-                _ => { return Div(sa, sb) }
-            }
-        }
-        Mod(a, b) => {
-            let sa: Expr = simplify(a)
-            let sb: Expr = simplify(b)
-            match (sa, sb) {
-                (Literal(na), Literal(nb)) => { return Literal(na % nb) }
-                _ => { return Mod(sa, sb) }
-            }
-        }
-    }
+    std.io.println("Left associativity:")
+    run_calc("10 - 3 - 2", "10 - 3 - 2")
+    run_calc("100 / 10 / 2", "100 / 10 / 2")
+    std.io.println("")
+
+    std.io.println("Parenthesized expressions:")
+    run_calc("(2 + 3) * 4", "(2 + 3) * 4")
+    run_calc("2 * (3 + 4)", "2 * (3 + 4)")
+    run_calc("((1 + 2) * (3 + 4))", "((1 + 2) * (3 + 4))")
+    std.io.println("")
+
+    std.io.println("Unary negation:")
+    run_calc("-5", "-5")
+    run_calc("-5 + 3", "-5 + 3")
+    run_calc("-(2 + 3)", "-(2 + 3)")
+    run_calc("10 + -3", "10 + -3")
+    std.io.println("")
+
+    std.io.println("Complex expressions:")
+    run_calc("1 + 2 * 3 - 4 / 2", "1 + 2 * 3 - 4 / 2")
+    run_calc("(1 + 2) * (3 - 4) / 2", "(1 + 2) * (3 - 4) / 2")
+    run_calc("10 % 3 + 7 % 4", "10 % 3 + 7 % 4")
+    std.io.println("")
+
+    std.io.println("=== Calculator Demo Complete ===")
 }

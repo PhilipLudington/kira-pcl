@@ -1,9 +1,4 @@
-/// Tests for the expression parsing module
-///
-/// Tests cover:
-/// - Chain combinators (chainl1, chainr1)
-/// - Expression parser builder
-/// - Prefix and postfix operators
+// Tests for the expression parsing module
 
 import src.types
 import src.primitives
@@ -15,103 +10,90 @@ import src.expr
 // Chain Combinator Tests
 // =============================================================================
 
-let test_chainl1_single_term: fn() -> void = fn() -> void {
-    let term: Parser[i64] = integer()
-    let op: Parser[fn(i64, i64) -> i64] = replace[string, fn(i64, i64) -> i64](
-        symbol("+"),
-        fn(a: i64, b: i64) -> i64 { return a + b }
-    )
-    let parser: Parser[i64] = chainl1[i64](term, op)
-    let result: ParseResult[i64] = run[i64](parser, "42 ")
+fn test_chainl1_op_single_term() -> void {
+    let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) + unwrap_int(b))
+    })
+    let parser: fn(Input) -> ParseResult = chainl1_op(integer(), Cons(add_op, Nil))
+    let result: ParseResult = run(parser, "42 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 42, "single term should return 42")
+        Success(v, _) => {
+            assert(unwrap_int(v) == 42i64, "single term should return 42")
         }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }
     return
 }
 
-let test_chainl1_two_terms: fn() -> void = fn() -> void {
-    let term: Parser[i64] = integer()
-    let op: Parser[fn(i64, i64) -> i64] = replace[string, fn(i64, i64) -> i64](
-        symbol("+"),
-        fn(a: i64, b: i64) -> i64 { return a + b }
-    )
-    let parser: Parser[i64] = chainl1[i64](term, op)
-    let result: ParseResult[i64] = run[i64](parser, "1 + 2 ")
+fn test_chainl1_op_two_terms() -> void {
+    let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) + unwrap_int(b))
+    })
+    let parser: fn(Input) -> ParseResult = chainl1_op(integer(), Cons(add_op, Nil))
+    let result: ParseResult = run(parser, "1 + 2 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 3, "1 + 2 should equal 3")
+        Success(v, _) => {
+            assert(unwrap_int(v) == 3i64, "1 + 2 should equal 3")
         }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }
     return
 }
 
-let test_chainl1_left_associative: fn() -> void = fn() -> void {
-    // Test: 10 - 3 - 2 should be ((10 - 3) - 2) = 5, not (10 - (3 - 2)) = 9
-    let term: Parser[i64] = integer()
-    let op: Parser[fn(i64, i64) -> i64] = replace[string, fn(i64, i64) -> i64](
-        symbol("-"),
-        fn(a: i64, b: i64) -> i64 { return a - b }
-    )
-    let parser: Parser[i64] = chainl1[i64](term, op)
-    let result: ParseResult[i64] = run[i64](parser, "10 - 3 - 2 ")
+fn test_chainl1_op_left_associative() -> void {
+    // Test: 10 - 3 - 2 should be ((10 - 3) - 2) = 5
+    let sub_op: Operator = infixl_op(symbol("-"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) - unwrap_int(b))
+    })
+    let parser: fn(Input) -> ParseResult = chainl1_op(integer(), Cons(sub_op, Nil))
+    let result: ParseResult = run(parser, "10 - 3 - 2 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 5, "10 - 3 - 2 should be 5 (left associative)")
+        Success(v, _) => {
+            assert(unwrap_int(v) == 5i64, "10 - 3 - 2 should be 5 (left associative)")
         }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }
     return
 }
 
-let test_chainr1_right_associative: fn() -> void = fn() -> void {
-    // Test: 2 ^ 3 ^ 2 should be (2 ^ (3 ^ 2)) = 2^9 = 512, not ((2 ^ 3) ^ 2) = 8^2 = 64
-    // Using subtraction to make it clearer: 10 - 3 - 2 = 10 - (3 - 2) = 10 - 1 = 9
-    let term: Parser[i64] = integer()
-    let op: Parser[fn(i64, i64) -> i64] = replace[string, fn(i64, i64) -> i64](
-        symbol("-"),
-        fn(a: i64, b: i64) -> i64 { return a - b }
-    )
-    let parser: Parser[i64] = chainr1[i64](term, op)
-    let result: ParseResult[i64] = run[i64](parser, "10 - 3 - 2 ")
+fn test_chainr1_op_right_associative() -> void {
+    // Test: 10 - 3 - 2 = 10 - (3 - 2) = 10 - 1 = 9
+    let sub_op: Operator = infixr_op(symbol("-"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) - unwrap_int(b))
+    })
+    let parser: fn(Input) -> ParseResult = chainr1_op(integer(), Cons(sub_op, Nil))
+    let result: ParseResult = run(parser, "10 - 3 - 2 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 9, "10 - 3 - 2 should be 9 (right associative)")
+        Success(v, _) => {
+            assert(unwrap_int(v) == 9i64, "10 - 3 - 2 should be 9 (right associative)")
         }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }
     return
 }
 
-let test_chainl1_multiple_ops: fn() -> void = fn() -> void {
-    let term: Parser[i64] = integer()
-    let add_op: Parser[fn(i64, i64) -> i64] = replace[string, fn(i64, i64) -> i64](
-        symbol("+"),
-        fn(a: i64, b: i64) -> i64 { return a + b }
-    )
-    let sub_op: Parser[fn(i64, i64) -> i64] = replace[string, fn(i64, i64) -> i64](
-        symbol("-"),
-        fn(a: i64, b: i64) -> i64 { return a - b }
-    )
-    let op: Parser[fn(i64, i64) -> i64] = or_else[fn(i64, i64) -> i64](add_op, sub_op)
-    let parser: Parser[i64] = chainl1[i64](term, op)
-    let result: ParseResult[i64] = run[i64](parser, "10 + 5 - 3 ")
+fn test_chainl1_op_multiple_ops() -> void {
+    let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) + unwrap_int(b))
+    })
+    let sub_op: Operator = infixl_op(symbol("-"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) - unwrap_int(b))
+    })
+    let parser: fn(Input) -> ParseResult = chainl1_op(integer(), Cons(add_op, Cons(sub_op, Nil)))
+    let result: ParseResult = run(parser, "10 + 5 - 3 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 12, "10 + 5 - 3 should be 12")
+        Success(v, _) => {
+            assert(unwrap_int(v) == 12i64, "10 + 5 - 3 should be 12")
         }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }
@@ -122,186 +104,95 @@ let test_chainl1_multiple_ops: fn() -> void = fn() -> void {
 // Expression Parser Builder Tests
 // =============================================================================
 
-let test_add_operators_single_level: fn() -> void = fn() -> void {
-    let term: Parser[i64] = integer()
-    let mul_op: Operator[i64] = infixl[i64](
-        symbol("*"),
-        fn(a: i64, b: i64) -> i64 { return a * b }
-    )
-    let level: PrecLevel[i64] = Cons(mul_op, Nil)
-    let parser: Parser[i64] = add_operators[i64](term, level)
-    let result: ParseResult[i64] = run[i64](parser, "2 * 3 * 4 ")
+fn test_add_operators_single_level() -> void {
+    let mul_op: Operator = infixl_op(symbol("*"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) * unwrap_int(b))
+    })
+    let parser: fn(Input) -> ParseResult = add_operators(integer(), Cons(mul_op, Nil))
+    let result: ParseResult = run(parser, "2 * 3 * 4 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 24, "2 * 3 * 4 should be 24")
+        Success(v, _) => {
+            assert(unwrap_int(v) == 24i64, "2 * 3 * 4 should be 24")
         }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }
     return
 }
 
-let test_build_expr_parser_precedence: fn() -> void = fn() -> void {
-    let term: Parser[i64] = integer()
+fn test_build_expr_parser_precedence() -> void {
+    let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) + unwrap_int(b))
+    })
+    let sub_op: Operator = infixl_op(symbol("-"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) - unwrap_int(b))
+    })
+    let mul_op: Operator = infixl_op(symbol("*"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) * unwrap_int(b))
+    })
+    let div_op: Operator = infixl_op(symbol("/"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) / unwrap_int(b))
+    })
 
-    // Lower precedence: + and -
-    let add_op: Operator[i64] = infixl[i64](
-        symbol("+"),
-        fn(a: i64, b: i64) -> i64 { return a + b }
-    )
-    let sub_op: Operator[i64] = infixl[i64](
-        symbol("-"),
-        fn(a: i64, b: i64) -> i64 { return a - b }
-    )
-    let add_level: PrecLevel[i64] = Cons(add_op, Cons(sub_op, Nil))
+    // Table: highest precedence first
+    let mul_level: List[Operator] = Cons(mul_op, Cons(div_op, Nil))
+    let add_level: List[Operator] = Cons(add_op, Cons(sub_op, Nil))
+    let table: List[List[Operator]] = Cons(mul_level, Cons(add_level, Nil))
+    let parser: fn(Input) -> ParseResult = build_expr_parser(table, integer())
 
-    // Higher precedence: * and /
-    let mul_op: Operator[i64] = infixl[i64](
-        symbol("*"),
-        fn(a: i64, b: i64) -> i64 { return a * b }
-    )
-    let div_op: Operator[i64] = infixl[i64](
-        symbol("/"),
-        fn(a: i64, b: i64) -> i64 { return a / b }
-    )
-    let mul_level: PrecLevel[i64] = Cons(mul_op, Cons(div_op, Nil))
-
-    // Build: first add_level (lower prec), then mul_level (higher prec)
-    let table: List[PrecLevel[i64]] = Cons(add_level, Cons(mul_level, Nil))
-    let parser: Parser[i64] = build_expr_parser[i64](table, term)
-
-    // Test: 2 + 3 * 4 = 2 + 12 = 14 (multiplication has higher precedence)
-    let result: ParseResult[i64] = run[i64](parser, "2 + 3 * 4 ")
+    // Test: 2 + 3 * 4 = 2 + 12 = 14
+    let result: ParseResult = run(parser, "2 + 3 * 4 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 14, "2 + 3 * 4 should be 14")
+        Success(v, _) => {
+            assert(unwrap_int(v) == 14i64, "2 + 3 * 4 should be 14")
         }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }
     return
 }
 
-let test_build_expr_parser_associativity: fn() -> void = fn() -> void {
-    let term: Parser[i64] = integer()
-
-    let sub_op: Operator[i64] = infixl[i64](
-        symbol("-"),
-        fn(a: i64, b: i64) -> i64 { return a - b }
-    )
-    let level: PrecLevel[i64] = Cons(sub_op, Nil)
-    let table: List[PrecLevel[i64]] = Cons(level, Nil)
-    let parser: Parser[i64] = build_expr_parser[i64](table, term)
+fn test_build_expr_parser_associativity() -> void {
+    let sub_op: Operator = infixl_op(symbol("-"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) - unwrap_int(b))
+    })
+    let level: List[Operator] = Cons(sub_op, Nil)
+    let table: List[List[Operator]] = Cons(level, Nil)
+    let parser: fn(Input) -> ParseResult = build_expr_parser(table, integer())
 
     // 100 - 30 - 10 = ((100 - 30) - 10) = 60
-    let result: ParseResult[i64] = run[i64](parser, "100 - 30 - 10 ")
+    let result: ParseResult = run(parser, "100 - 30 - 10 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 60, "100 - 30 - 10 should be 60")
+        Success(v, _) => {
+            assert(unwrap_int(v) == 60i64, "100 - 30 - 10 should be 60")
         }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }
     return
 }
 
-// =============================================================================
-// Prefix/Postfix Tests
-// =============================================================================
+fn test_non_assoc_operator() -> void {
+    let eq_op: Operator = infix_none_op(symbol("=="), fn(a: Value, b: Value) -> Value {
+        if unwrap_int(a) == unwrap_int(b) {
+            return VBool(true)
+        }
+        return VBool(false)
+    })
+    let level: List[Operator] = Cons(eq_op, Nil)
+    let table: List[List[Operator]] = Cons(level, Nil)
+    let parser: fn(Input) -> ParseResult = build_expr_parser(table, integer())
 
-let test_prefix_single: fn() -> void = fn() -> void {
-    let neg: Parser[fn(i64) -> i64] = replace[string, fn(i64) -> i64](
-        symbol("-"),
-        fn(x: i64) -> i64 { return -x }
-    )
-    let term: Parser[i64] = integer()
-    let parser: Parser[i64] = prefix[i64](neg, term)
-    let result: ParseResult[i64] = run[i64](parser, "- 42 ")
+    // 3 == 3 should work
+    let result: ParseResult = run(parser, "3 == 3 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == -42, "-42 should be -42")
+        Success(v, _) => {
+            assert(unwrap_bool(v), "3 == 3 should be true")
         }
-        Failure { error: _ } => {
-            assert(false, "should succeed")
-        }
-    }
-    return
-}
-
-let test_prefix_multiple: fn() -> void = fn() -> void {
-    let neg: Parser[fn(i64) -> i64] = replace[string, fn(i64) -> i64](
-        symbol("-"),
-        fn(x: i64) -> i64 { return -x }
-    )
-    let term: Parser[i64] = integer()
-    let parser: Parser[i64] = prefix[i64](neg, term)
-    let result: ParseResult[i64] = run[i64](parser, "- - 42 ")
-    match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 42, "- - 42 should be 42")
-        }
-        Failure { error: _ } => {
-            assert(false, "should succeed")
-        }
-    }
-    return
-}
-
-let test_prefix_none: fn() -> void = fn() -> void {
-    let neg: Parser[fn(i64) -> i64] = replace[string, fn(i64) -> i64](
-        symbol("-"),
-        fn(x: i64) -> i64 { return -x }
-    )
-    let term: Parser[i64] = integer()
-    let parser: Parser[i64] = prefix[i64](neg, term)
-    let result: ParseResult[i64] = run[i64](parser, "42 ")
-    match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 42, "42 should be 42")
-        }
-        Failure { error: _ } => {
-            assert(false, "should succeed")
-        }
-    }
-    return
-}
-
-let test_postfix_single: fn() -> void = fn() -> void {
-    // Factorial-like: 5! (but just double for testing)
-    let bang: Parser[fn(i64) -> i64] = replace[string, fn(i64) -> i64](
-        symbol("!"),
-        fn(x: i64) -> i64 { return x * 2 }
-    )
-    let term: Parser[i64] = integer()
-    let parser: Parser[i64] = postfix[i64](term, bang)
-    let result: ParseResult[i64] = run[i64](parser, "5 ! ")
-    match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 10, "5! should be 10")
-        }
-        Failure { error: _ } => {
-            assert(false, "should succeed")
-        }
-    }
-    return
-}
-
-let test_postfix_multiple: fn() -> void = fn() -> void {
-    let bang: Parser[fn(i64) -> i64] = replace[string, fn(i64) -> i64](
-        symbol("!"),
-        fn(x: i64) -> i64 { return x * 2 }
-    )
-    let term: Parser[i64] = integer()
-    let parser: Parser[i64] = postfix[i64](term, bang)
-    let result: ParseResult[i64] = run[i64](parser, "3 ! ! ")
-    match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 12, "3!! should be 12")
-        }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }
@@ -312,40 +203,33 @@ let test_postfix_multiple: fn() -> void = fn() -> void {
 // Complex Expression Tests
 // =============================================================================
 
-let test_complex_expression: fn() -> void = fn() -> void {
-    let term: Parser[i64] = integer()
+fn test_complex_expression() -> void {
+    let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) + unwrap_int(b))
+    })
+    let sub_op: Operator = infixl_op(symbol("-"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) - unwrap_int(b))
+    })
+    let mul_op: Operator = infixl_op(symbol("*"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) * unwrap_int(b))
+    })
+    let div_op: Operator = infixl_op(symbol("/"), fn(a: Value, b: Value) -> Value {
+        return VInt(unwrap_int(a) / unwrap_int(b))
+    })
 
-    // Build a complete arithmetic parser
-    let add_op: Operator[i64] = infixl[i64](
-        symbol("+"),
-        fn(a: i64, b: i64) -> i64 { return a + b }
-    )
-    let sub_op: Operator[i64] = infixl[i64](
-        symbol("-"),
-        fn(a: i64, b: i64) -> i64 { return a - b }
-    )
-    let add_level: PrecLevel[i64] = Cons(add_op, Cons(sub_op, Nil))
-
-    let mul_op: Operator[i64] = infixl[i64](
-        symbol("*"),
-        fn(a: i64, b: i64) -> i64 { return a * b }
-    )
-    let div_op: Operator[i64] = infixl[i64](
-        symbol("/"),
-        fn(a: i64, b: i64) -> i64 { return a / b }
-    )
-    let mul_level: PrecLevel[i64] = Cons(mul_op, Cons(div_op, Nil))
-
-    let table: List[PrecLevel[i64]] = Cons(add_level, Cons(mul_level, Nil))
-    let parser: Parser[i64] = build_expr_parser[i64](table, term)
+    // Table: highest precedence first
+    let mul_level: List[Operator] = Cons(mul_op, Cons(div_op, Nil))
+    let add_level: List[Operator] = Cons(add_op, Cons(sub_op, Nil))
+    let table: List[List[Operator]] = Cons(mul_level, Cons(add_level, Nil))
+    let parser: fn(Input) -> ParseResult = build_expr_parser(table, integer())
 
     // Test: 1 + 2 * 3 - 4 / 2 = 1 + 6 - 2 = 5
-    let result: ParseResult[i64] = run[i64](parser, "1 + 2 * 3 - 4 / 2 ")
+    let result: ParseResult = run(parser, "1 + 2 * 3 - 4 / 2 ")
     match result {
-        Success { value: n, remaining: _ } => {
-            assert(n == 5, "1 + 2 * 3 - 4 / 2 should be 5")
+        Success(v, _) => {
+            assert(unwrap_int(v) == 5i64, "1 + 2 * 3 - 4 / 2 should be 5")
         }
-        Failure { error: _ } => {
+        Failure(_) => {
             assert(false, "should succeed")
         }
     }

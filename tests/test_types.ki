@@ -1,12 +1,4 @@
-/// Tests for the core types module
-///
-/// Tests cover:
-/// - Position creation and advancement
-/// - Input creation
-/// - Error creation and merging
-/// - ParseResult predicates
-/// - List utilities
-/// - String utilities
+// Tests for the core types module
 
 import src.types
 
@@ -14,7 +6,7 @@ import src.types
 // Position Tests
 // =============================================================================
 
-let test_position_new: fn() -> void = fn() -> void {
+fn test_position_new() -> void {
     let pos: Position = position_new(10, 2, 5)
     assert(pos.offset == 10, "offset should be 10")
     assert(pos.line == 2, "line should be 2")
@@ -22,7 +14,7 @@ let test_position_new: fn() -> void = fn() -> void {
     return
 }
 
-let test_advance_position_regular_char: fn() -> void = fn() -> void {
+fn test_advance_position_regular_char() -> void {
     let pos: Position = position_new(0, 1, 1)
     let new_pos: Position = advance_position(pos, 'a')
     assert(new_pos.offset == 1, "offset should advance by 1")
@@ -31,7 +23,7 @@ let test_advance_position_regular_char: fn() -> void = fn() -> void {
     return
 }
 
-let test_advance_position_newline: fn() -> void = fn() -> void {
+fn test_advance_position_newline() -> void {
     let pos: Position = position_new(5, 1, 6)
     let new_pos: Position = advance_position(pos, '\n')
     assert(new_pos.offset == 6, "offset should advance by 1")
@@ -40,7 +32,7 @@ let test_advance_position_newline: fn() -> void = fn() -> void {
     return
 }
 
-let test_advance_position_by_string: fn() -> void = fn() -> void {
+fn test_advance_position_by_string() -> void {
     let pos: Position = position_new(0, 1, 1)
     let new_pos: Position = advance_position_by_string(pos, "abc")
     assert(new_pos.offset == 3, "offset should be 3")
@@ -49,7 +41,7 @@ let test_advance_position_by_string: fn() -> void = fn() -> void {
     return
 }
 
-let test_advance_position_by_string_with_newline: fn() -> void = fn() -> void {
+fn test_advance_position_by_string_with_newline() -> void {
     let pos: Position = position_new(0, 1, 1)
     let new_pos: Position = advance_position_by_string(pos, "ab\ncd")
     assert(new_pos.offset == 5, "offset should be 5")
@@ -62,7 +54,7 @@ let test_advance_position_by_string_with_newline: fn() -> void = fn() -> void {
 // Input Tests
 // =============================================================================
 
-let test_input_new: fn() -> void = fn() -> void {
+fn test_input_new() -> void {
     let input: Input = input_new("hello world")
     assert(input.source == "hello world", "source should match")
     assert(input.pos.offset == 0, "offset should start at 0")
@@ -71,7 +63,7 @@ let test_input_new: fn() -> void = fn() -> void {
     return
 }
 
-let test_input_new_empty: fn() -> void = fn() -> void {
+fn test_input_new_empty() -> void {
     let input: Input = input_new("")
     assert(input.source == "", "source should be empty")
     assert(input.pos.offset == 0, "offset should be 0")
@@ -82,12 +74,12 @@ let test_input_new_empty: fn() -> void = fn() -> void {
 // Error Tests
 // =============================================================================
 
-let test_error_at_creates_error: fn() -> void = fn() -> void {
+fn test_error_at_creates_error() -> void {
     let pos: Position = position_new(5, 2, 3)
     let err: ParseError = error_at(pos, Literal("x"), Some('y'))
     assert(err.position.offset == 5, "position offset should match")
     assert(err.position.line == 2, "position line should match")
-    assert(length[Expected](err.expected) == 1, "should have one expected")
+    assert(std.list.length(err.expected) == 1, "should have one expected")
     match err.actual {
         Some(c) => { assert(c == 'y', "actual should be 'y'") }
         None => { assert(false, "actual should be Some") }
@@ -95,7 +87,7 @@ let test_error_at_creates_error: fn() -> void = fn() -> void {
     return
 }
 
-let test_error_at_with_none_actual: fn() -> void = fn() -> void {
+fn test_error_at_with_none_actual() -> void {
     let pos: Position = position_new(0, 1, 1)
     let err: ParseError = error_at(pos, EndOfInput, None)
     match err.actual {
@@ -104,7 +96,7 @@ let test_error_at_with_none_actual: fn() -> void = fn() -> void {
     }
 }
 
-let test_merge_errors_takes_furthest: fn() -> void = fn() -> void {
+fn test_merge_errors_takes_furthest() -> void {
     let e1: ParseError = error_at(position_new(5, 1, 6), Literal("a"), None)
     let e2: ParseError = error_at(position_new(10, 2, 3), Literal("b"), None)
     let merged: ParseError = merge_errors(e1, e2)
@@ -112,7 +104,7 @@ let test_merge_errors_takes_furthest: fn() -> void = fn() -> void {
     return
 }
 
-let test_merge_errors_takes_first_if_furthest: fn() -> void = fn() -> void {
+fn test_merge_errors_takes_first_if_furthest() -> void {
     let e1: ParseError = error_at(position_new(10, 2, 3), Literal("a"), None)
     let e2: ParseError = error_at(position_new(5, 1, 6), Literal("b"), None)
     let merged: ParseError = merge_errors(e1, e2)
@@ -120,12 +112,12 @@ let test_merge_errors_takes_first_if_furthest: fn() -> void = fn() -> void {
     return
 }
 
-let test_merge_errors_same_position_merges: fn() -> void = fn() -> void {
+fn test_merge_errors_same_position_merges() -> void {
     let e1: ParseError = error_at(position_new(5, 1, 6), Literal("a"), None)
     let e2: ParseError = error_at(position_new(5, 1, 6), Literal("b"), None)
     let merged: ParseError = merge_errors(e1, e2)
     assert(merged.position.offset == 5, "position should be same")
-    assert(length[Expected](merged.expected) == 2, "should merge expected lists")
+    assert(std.list.length(merged.expected) == 2, "should merge expected lists")
     return
 }
 
@@ -133,112 +125,54 @@ let test_merge_errors_same_position_merges: fn() -> void = fn() -> void {
 // ParseResult Tests
 // =============================================================================
 
-let test_parse_result_is_success: fn() -> void = fn() -> void {
-    let result: ParseResult[i32] = Success { value: 42, remaining: input_new("") }
-    assert(is_success[i32](result), "should be success")
-    assert(not is_failure[i32](result), "should not be failure")
+fn test_parse_result_is_success() -> void {
+    let result: ParseResult = Success(VInt(42i64), input_new(""))
+    assert(is_success(result), "should be success")
+    assert(not is_failure(result), "should not be failure")
     return
 }
 
-let test_parse_result_is_failure: fn() -> void = fn() -> void {
+fn test_parse_result_is_failure() -> void {
     let err: ParseError = error_at(position_new(0, 1, 1), Custom("error"), None)
-    let result: ParseResult[i32] = Failure { error: err }
-    assert(is_failure[i32](result), "should be failure")
-    assert(not is_success[i32](result), "should not be success")
+    let result: ParseResult = Failure(err)
+    assert(is_failure(result), "should be failure")
+    assert(not is_success(result), "should not be success")
     return
 }
 
 // =============================================================================
-// List Utility Tests
+// Value Extraction Tests
 // =============================================================================
 
-let test_reverse_empty_list: fn() -> void = fn() -> void {
-    let empty: List[i32] = Nil
-    let result: List[i32] = reverse[i32](empty)
-    match result {
-        Nil => { return }
-        Cons(_, _) => { assert(false, "reversed empty list should be empty") }
-    }
-}
-
-let test_reverse_list: fn() -> void = fn() -> void {
-    let list: List[i32] = Cons(1, Cons(2, Cons(3, Nil)))
-    let result: List[i32] = reverse[i32](list)
-    match result {
-        Cons(a, Cons(b, Cons(c, Nil))) => {
-            assert(a == 3, "first should be 3")
-            assert(b == 2, "second should be 2")
-            assert(c == 1, "third should be 1")
-        }
-        _ => { assert(false, "unexpected list structure") }
-    }
+fn test_unwrap_char() -> void {
+    let v: Value = VChar('x')
+    assert(unwrap_char(v) == 'x', "should unwrap 'x'")
     return
 }
 
-let test_concat_empty_lists: fn() -> void = fn() -> void {
-    let a: List[i32] = Nil
-    let b: List[i32] = Nil
-    let result: List[i32] = concat[i32](a, b)
-    match result {
-        Nil => { return }
-        _ => { assert(false, "concat of empty lists should be empty") }
-    }
-}
-
-let test_concat_lists: fn() -> void = fn() -> void {
-    let a: List[i32] = Cons(1, Cons(2, Nil))
-    let b: List[i32] = Cons(3, Cons(4, Nil))
-    let result: List[i32] = concat[i32](a, b)
-    assert(length[i32](result) == 4, "length should be 4")
-    match result {
-        Cons(x1, Cons(x2, Cons(x3, Cons(x4, Nil)))) => {
-            assert(x1 == 1, "first should be 1")
-            assert(x2 == 2, "second should be 2")
-            assert(x3 == 3, "third should be 3")
-            assert(x4 == 4, "fourth should be 4")
-        }
-        _ => { assert(false, "unexpected list structure") }
-    }
+fn test_unwrap_string() -> void {
+    let v: Value = VString("hello")
+    assert(unwrap_string(v) == "hello", "should unwrap 'hello'")
     return
 }
 
-let test_length_empty: fn() -> void = fn() -> void {
-    let empty: List[i32] = Nil
-    assert(length[i32](empty) == 0, "length of empty list should be 0")
+fn test_unwrap_int() -> void {
+    let v: Value = VInt(42i64)
+    assert(unwrap_int(v) == 42i64, "should unwrap 42")
     return
 }
 
-let test_length_non_empty: fn() -> void = fn() -> void {
-    let list: List[i32] = Cons(1, Cons(2, Cons(3, Nil)))
-    assert(length[i32](list) == 3, "length should be 3")
+fn test_unwrap_list_val() -> void {
+    let v: Value = VList(Cons(VInt(1i64), Cons(VInt(2i64), Nil)))
+    let items: List[Value] = unwrap_list(v)
+    assert(std.list.length(items) == 2, "should have 2 items")
     return
 }
 
-let test_list_map: fn() -> void = fn() -> void {
-    let list: List[i32] = Cons(1, Cons(2, Cons(3, Nil)))
-    let doubled: List[i32] = list_map[i32, i32](list, fn(x: i32) -> i32 { return x * 2 })
-    match doubled {
-        Cons(a, Cons(b, Cons(c, Nil))) => {
-            assert(a == 2, "first should be 2")
-            assert(b == 4, "second should be 4")
-            assert(c == 6, "third should be 6")
-        }
-        _ => { assert(false, "unexpected list structure") }
-    }
-    return
-}
-
-let test_fold_sum: fn() -> void = fn() -> void {
-    let list: List[i32] = Cons(1, Cons(2, Cons(3, Cons(4, Nil))))
-    let sum: i32 = fold[i32, i32](list, 0, fn(acc: i32, x: i32) -> i32 { return acc + x })
-    assert(sum == 10, "sum should be 10")
-    return
-}
-
-let test_fold_empty: fn() -> void = fn() -> void {
-    let empty: List[i32] = Nil
-    let result: i32 = fold[i32, i32](empty, 42, fn(acc: i32, x: i32) -> i32 { return acc + x })
-    assert(result == 42, "fold of empty list should return initial value")
+fn test_value_chars_to_string() -> void {
+    let v: Value = VList(Cons(VChar('a'), Cons(VChar('b'), Cons(VChar('c'), Nil))))
+    let s: string = value_chars_to_string(v)
+    assert(s == "abc", "should produce 'abc'")
     return
 }
 
@@ -246,93 +180,88 @@ let test_fold_empty: fn() -> void = fn() -> void {
 // String Utility Tests
 // =============================================================================
 
-let test_substring_from_start: fn() -> void = fn() -> void {
-    let s: string = "hello"
-    let result: string = substring(s, 0)
-    assert(result == "hello", "substring from 0 should be whole string")
+fn test_remaining_from_start() -> void {
+    let result: string = remaining_from("hello", 0)
+    assert(result == "hello", "remaining_from 0 should be whole string")
     return
 }
 
-let test_substring_from_middle: fn() -> void = fn() -> void {
-    let s: string = "hello"
-    let result: string = substring(s, 2)
-    assert(result == "llo", "substring from 2 should be 'llo'")
+fn test_remaining_from_middle() -> void {
+    let result: string = remaining_from("hello", 2)
+    assert(result == "llo", "remaining_from 2 should be 'llo'")
     return
 }
 
-let test_substring_past_end: fn() -> void = fn() -> void {
-    let s: string = "hello"
-    let result: string = substring(s, 10)
-    assert(result == "", "substring past end should be empty")
+fn test_remaining_from_past_end() -> void {
+    let result: string = remaining_from("hello", 10)
+    assert(result == "", "remaining_from past end should be empty")
     return
 }
 
-let test_string_head_non_empty: fn() -> void = fn() -> void {
-    let s: string = "hello"
-    match string_head(s) {
+fn test_string_head_non_empty() -> void {
+    match string_head("hello") {
         Some(c) => { assert(c == 'h', "head should be 'h'") }
         None => { assert(false, "head should be Some") }
     }
     return
 }
 
-let test_string_head_empty: fn() -> void = fn() -> void {
-    let s: string = ""
-    match string_head(s) {
+fn test_string_head_empty() -> void {
+    match string_head("") {
         Some(_) => { assert(false, "head of empty should be None") }
         None => { return }
     }
 }
 
-let test_string_is_empty_true: fn() -> void = fn() -> void {
+fn test_string_is_empty_true() -> void {
     assert(string_is_empty(""), "empty string should be empty")
     return
 }
 
-let test_string_is_empty_false: fn() -> void = fn() -> void {
+fn test_string_is_empty_false() -> void {
     assert(not string_is_empty("x"), "non-empty string should not be empty")
     return
 }
 
-let test_starts_with_true: fn() -> void = fn() -> void {
+fn test_starts_with_true() -> void {
     assert(starts_with("hello", "hel"), "'hello' should start with 'hel'")
     return
 }
 
-let test_starts_with_false: fn() -> void = fn() -> void {
+fn test_starts_with_false() -> void {
     assert(not starts_with("hello", "world"), "'hello' should not start with 'world'")
     return
 }
 
-let test_starts_with_empty_prefix: fn() -> void = fn() -> void {
+fn test_starts_with_empty_prefix() -> void {
     assert(starts_with("hello", ""), "any string starts with empty prefix")
     return
 }
 
-let test_string_contains_char_true: fn() -> void = fn() -> void {
+fn test_string_contains_char_true() -> void {
     assert(string_contains_char("hello", 'l'), "'hello' should contain 'l'")
     return
 }
 
-let test_string_contains_char_false: fn() -> void = fn() -> void {
+fn test_string_contains_char_false() -> void {
     assert(not string_contains_char("hello", 'z'), "'hello' should not contain 'z'")
     return
 }
 
-let test_char_to_string: fn() -> void = fn() -> void {
+fn test_char_to_string() -> void {
     let s: string = char_to_string('a')
-    assert(s == "a", "char_to_string('a') should be \"a\"")
+    assert(s == "a", "char_to_string('a') should be 'a'")
     return
 }
 
-let test_chars_to_string: fn() -> void = fn() -> void {
+fn test_chars_to_string() -> void {
     let chars: List[char] = Cons('a', Cons('b', Cons('c', Nil)))
     let s: string = chars_to_string(chars)
     assert(s == "abc", "chars_to_string should produce 'abc'")
     return
 }
 
-let test_chars_to_string_empty: fn() -> void = fn() -> void {
+fn test_chars_to_string_empty() -> void {
     let chars: List[char] = Nil
     let s: string = chars_to_string(chars)
     assert(s == "", "chars_to_string of empty should be empty")

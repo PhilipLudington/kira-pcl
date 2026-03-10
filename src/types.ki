@@ -1,45 +1,31 @@
-/// Core types for the Parser Combinator Library
-///
-/// This module defines the foundational types used throughout the library:
-/// - Position: Tracks location in source input
-/// - Input: Input stream with position tracking
-/// - Expected: Describes what the parser expected
-/// - ParseError: Rich error type with context
-/// - ParseResult[T]: Success or Failure result
+// Core types for the Parser Combinator Library
+
+module src.types
 
 // =============================================================================
 // Position Types
 // =============================================================================
 
-/// Position in source input for error reporting
-type Position = {
-    offset: i64,      // Byte offset from start
-    line: i32,        // 1-indexed line number
-    column: i32       // 1-indexed column number
+pub type Position = {
+    offset: i32,
+    line: i32,
+    column: i32
 }
 
-/// Create a new position
-let position_new: fn(i64, i32, i32) -> Position =
-    fn(offset: i64, line: i32, column: i32) -> Position {
-        return Position {
-            offset: offset,
-            line: line,
-            column: column
-        }
-    }
+pub fn position_new(offset: i32, line: i32, column: i32) -> Position {
+    return Position { offset: offset, line: line, column: column }
+}
 
 // =============================================================================
 // Input Types
 // =============================================================================
 
-/// Input stream with position tracking
-type Input = {
-    source: string,   // Full source text
-    pos: Position     // Current position
+pub type Input = {
+    source: string,
+    pos: Position
 }
 
-/// Create input from source string
-let input_new: fn(string) -> Input = fn(source: string) -> Input {
+pub fn input_new(source: string) -> Input {
     return Input {
         source: source,
         pos: Position { offset: 0, line: 1, column: 1 }
@@ -50,168 +36,228 @@ let input_new: fn(string) -> Input = fn(source: string) -> Input {
 // Error Types
 // =============================================================================
 
-/// Expected input description
-type Expected =
+pub type Expected =
     | Literal(string)
     | CharClass(string)
     | EndOfInput
     | Custom(string)
 
-/// Parse error with full context
-type ParseError = {
+pub type ParseError = {
     position: Position,
     expected: List[Expected],
     actual: Option[char],
     context: List[string]
 }
 
-/// Create error at position
-let error_at: fn(Position, Expected, Option[char]) -> ParseError =
-    fn(pos: Position, exp: Expected, actual: Option[char]) -> ParseError {
-        return ParseError {
-            position: pos,
-            expected: Cons(exp, Nil),
-            actual: actual,
-            context: Nil
-        }
+pub fn error_at(pos: Position, exp: Expected, actual: Option[char]) -> ParseError {
+    return ParseError {
+        position: pos,
+        expected: Cons(exp, Nil),
+        actual: actual,
+        context: Nil
     }
+}
 
-/// Merge two errors (for alternation)
-/// Keeps error at furthest position, or merges expected if same position
-let merge_errors: fn(ParseError, ParseError) -> ParseError =
-    fn(e1: ParseError, e2: ParseError) -> ParseError {
-        // Keep error at furthest position
-        if e1.position.offset > e2.position.offset {
-            return e1
-        }
-        if e2.position.offset > e1.position.offset {
-            return e2
-        }
-        // Same position: merge expected lists
-        return ParseError {
-            position: e1.position,
-            expected: concat[Expected](e1.expected, e2.expected),
-            actual: e1.actual,
-            context: e1.context
-        }
+pub fn merge_errors(e1: ParseError, e2: ParseError) -> ParseError {
+    if e1.position.offset > e2.position.offset {
+        return e1
     }
+    if e2.position.offset > e1.position.offset {
+        return e2
+    }
+    return ParseError {
+        position: e1.position,
+        expected: std.list.concat(e1.expected, e2.expected),
+        actual: e1.actual,
+        context: e1.context
+    }
+}
 
 // =============================================================================
-// Parse Result Type
+// Value Type
 // =============================================================================
 
-/// Result of a parse attempt
-type ParseResult[T] =
-    | Success { value: T, remaining: Input }
-    | Failure { error: ParseError }
+pub type Value =
+    | VString(string)
+    | VChar(char)
+    | VInt(i64)
+    | VFloat(f64)
+    | VBool(bool)
+    | VVoid
+    | VList(List[Value])
+    | VPair(Value, Value)
 
-/// Check if parse succeeded
-let is_success[T]: fn(ParseResult[T]) -> bool = fn(result: ParseResult[T]) -> bool {
+// =============================================================================
+// Parse Result Type (monomorphic)
+// =============================================================================
+
+pub type ParseResult =
+    | Success(Value, Input)
+    | Failure(ParseError)
+
+pub fn is_success(result: ParseResult) -> bool {
     match result {
-        Success { value: _, remaining: _ } => { return true }
-        Failure { error: _ } => { return false }
+        Success(_, _) => { return true }
+        Failure(_) => { return false }
     }
 }
 
-/// Check if parse failed
-let is_failure[T]: fn(ParseResult[T]) -> bool = fn(result: ParseResult[T]) -> bool {
+pub fn is_failure(result: ParseResult) -> bool {
     match result {
-        Success { value: _, remaining: _ } => { return false }
-        Failure { error: _ } => { return true }
+        Success(_, _) => { return false }
+        Failure(_) => { return true }
     }
 }
 
 // =============================================================================
-// Parser Type Alias
+// Value Extraction Helpers
 // =============================================================================
 
-/// A parser is a function from input to parse result
-type Parser[T] = fn(Input) -> ParseResult[T]
-
-// =============================================================================
-// String Utility Functions
-// =============================================================================
-
-/// Get substring starting from offset
-let substring: fn(string, i64) -> string = fn(s: string, offset: i64) -> string {
-    if offset <= 0 {
-        return s
-    }
-    if offset >= std.string.length(s) {
-        return ""
-    }
-    return std.string.slice(s, offset, std.string.length(s))
-}
-
-/// Get the first character of a string
-let string_head: fn(string) -> Option[char] = fn(s: string) -> Option[char] {
-    if std.string.length(s) == 0 {
-        return None
-    }
-    return Some(std.string.char_at(s, 0))
-}
-
-/// Check if string is empty
-let string_is_empty: fn(string) -> bool = fn(s: string) -> bool {
-    return std.string.length(s) == 0
-}
-
-/// Check if string starts with prefix
-let starts_with: fn(string, string) -> bool = fn(s: string, prefix: string) -> bool {
-    return std.string.starts_with(s, prefix)
-}
-
-/// Check if string contains character
-let string_contains_char: fn(string, char) -> bool = fn(s: string, c: char) -> bool {
-    var i: i64 = 0
-    let len: i64 = std.string.length(s)
-    loop {
-        if i >= len {
-            return false
-        }
-        if std.string.char_at(s, i) == c {
-            return true
-        }
-        i = i + 1
+pub fn unwrap_char(v: Value) -> char {
+    match v {
+        VChar(c) => { return c }
+        _ => { assert(false, "unwrap_char: expected VChar")
+               return 'x' }
     }
 }
 
-/// Convert character to string
-let char_to_string: fn(char) -> string = fn(c: char) -> string {
-    return std.string.from_char(c)
+pub fn unwrap_string(v: Value) -> string {
+    match v {
+        VString(s) => { return s }
+        _ => { assert(false, "unwrap_string: expected VString")
+               return "" }
+    }
 }
 
-/// Convert list of characters to string
-let chars_to_string: fn(List[char]) -> string = fn(chars: List[char]) -> string {
+pub fn unwrap_int(v: Value) -> i64 {
+    match v {
+        VInt(n) => { return n }
+        _ => { assert(false, "unwrap_int: expected VInt")
+               return 0i64 }
+    }
+}
+
+pub fn unwrap_float(v: Value) -> f64 {
+    match v {
+        VFloat(f) => { return f }
+        _ => { assert(false, "unwrap_float: expected VFloat")
+               return 0.0 }
+    }
+}
+
+pub fn unwrap_bool(v: Value) -> bool {
+    match v {
+        VBool(b) => { return b }
+        _ => { assert(false, "unwrap_bool: expected VBool")
+               return false }
+    }
+}
+
+pub fn unwrap_list(v: Value) -> List[Value] {
+    match v {
+        VList(l) => { return l }
+        _ => { assert(false, "unwrap_list: expected VList")
+               return Nil }
+    }
+}
+
+pub fn value_chars_to_string(v: Value) -> string {
+    let items: List[Value] = unwrap_list(v)
     var result: string = ""
-    var current: List[char] = chars
+    var current: List[Value] = items
     loop {
         match current {
             Nil => { return result }
-            Cons(c, rest) => {
-                result = std.string.concat(result, std.string.from_char(c))
+            Cons(item, rest) => {
+                result = result + to_string(unwrap_char(item))
                 current = rest
             }
         }
     }
 }
 
-/// Parse string to i64
-let string_to_i64: fn(string) -> i64 = fn(s: string) -> i64 {
-    return std.string.parse_i64(s)
+// =============================================================================
+// String Utility Functions
+// =============================================================================
+
+pub fn remaining_from(s: string, offset: i32) -> string {
+    if offset <= 0 {
+        return s
+    }
+    let len: i32 = std.string.length(s)
+    if offset >= len {
+        return ""
+    }
+    match std.string.substring(s, offset, len) {
+        Some(sub) => { return sub }
+        None => { return "" }
+    }
 }
 
-/// Convert i64 to f64
-let i64_to_f64: fn(i64) -> f64 = fn(n: i64) -> f64 {
-    return std.math.i64_to_f64(n)
+pub fn string_head(s: string) -> Option[char] {
+    if std.string.length(s) == 0 {
+        return None
+    }
+    return std.string.char_at(s, 0)
+}
+
+pub fn string_is_empty(s: string) -> bool {
+    return std.string.length(s) == 0
+}
+
+pub fn starts_with(s: string, prefix: string) -> bool {
+    return std.string.starts_with(s, prefix)
+}
+
+pub fn string_contains_char(s: string, c: char) -> bool {
+    var i: i32 = 0
+    let len: i32 = std.string.length(s)
+    loop {
+        if i >= len {
+            return false
+        }
+        match std.string.char_at(s, i) {
+            Some(ch) => {
+                if ch == c {
+                    return true
+                }
+            }
+            None => { return false }
+        }
+        i = i + 1
+    }
+}
+
+pub fn char_to_string(c: char) -> string {
+    return to_string(c)
+}
+
+pub fn chars_to_string(chars: List[char]) -> string {
+    var result: string = ""
+    var current: List[char] = chars
+    loop {
+        match current {
+            Nil => { return result }
+            Cons(c, rest) => {
+                result = result + to_string(c)
+                current = rest
+            }
+        }
+    }
+}
+
+pub fn string_to_i64(s: string) -> i64 {
+    match std.string.parse_int(s) {
+        Some(n) => { return n }
+        None => { return 0i64 }
+    }
 }
 
 // =============================================================================
 // Position Helpers
 // =============================================================================
 
-/// Advance position by one character
-let advance_position: fn(Position, char) -> Position = fn(pos: Position, c: char) -> Position {
+pub fn advance_position(pos: Position, c: char) -> Position {
     if c == '\n' {
         return Position {
             offset: pos.offset + 1,
@@ -226,87 +272,20 @@ let advance_position: fn(Position, char) -> Position = fn(pos: Position, c: char
     }
 }
 
-/// Advance position by a string
-let advance_position_by_string: fn(Position, string) -> Position =
-    fn(pos: Position, s: string) -> Position {
-        var current: Position = pos
-        var i: i64 = 0
-        let len: i64 = std.string.length(s)
-        loop {
-            if i >= len {
-                return current
-            }
-            let c: char = std.string.char_at(s, i)
-            current = advance_position(current, c)
-            i = i + 1
-        }
-    }
-
-// =============================================================================
-// List Utility Functions
-// =============================================================================
-
-/// Reverse a list
-let reverse[T]: fn(List[T]) -> List[T] = fn(list: List[T]) -> List[T] {
-    var result: List[T] = Nil
-    var current: List[T] = list
+pub fn advance_position_by_string(pos: Position, s: string) -> Position {
+    var current: Position = pos
+    var i: i32 = 0
+    let len: i32 = std.string.length(s)
     loop {
-        match current {
-            Nil => { return result }
-            Cons(head, tail) => {
-                result = Cons(head, result)
-                current = tail
-            }
+        if i >= len {
+            return current
         }
+        match std.string.char_at(s, i) {
+            Some(c) => {
+                current = advance_position(current, c)
+            }
+            None => { return current }
+        }
+        i = i + 1
     }
 }
-
-/// Concatenate two lists
-let concat[T]: fn(List[T], List[T]) -> List[T] = fn(a: List[T], b: List[T]) -> List[T] {
-    match a {
-        Nil => { return b }
-        Cons(head, tail) => { return Cons(head, concat[T](tail, b)) }
-    }
-}
-
-/// Get length of a list
-let length[T]: fn(List[T]) -> i32 = fn(list: List[T]) -> i32 {
-    var count: i32 = 0
-    var current: List[T] = list
-    loop {
-        match current {
-            Nil => { return count }
-            Cons(_, tail) => {
-                count = count + 1
-                current = tail
-            }
-        }
-    }
-}
-
-/// Map a function over a list
-let list_map[A, B]: fn(List[A], fn(A) -> B) -> List[B] =
-    fn(list: List[A], f: fn(A) -> B) -> List[B] {
-        match list {
-            Nil => { return Nil }
-            Cons(head, tail) => {
-                return Cons(f(head), list_map[A, B](tail, f))
-            }
-        }
-    }
-
-/// Fold a list from left to right
-let fold[A, B]: fn(List[A], B, fn(B, A) -> B) -> B =
-    fn(list: List[A], init: B, f: fn(B, A) -> B) -> B {
-        var acc: B = init
-        var current: List[A] = list
-        loop {
-            match current {
-                Nil => { return acc }
-                Cons(head, tail) => {
-                    acc = f(acc, head)
-                    current = tail
-                }
-            }
-        }
-    }
