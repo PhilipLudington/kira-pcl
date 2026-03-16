@@ -8,7 +8,7 @@ import src.combinators
 // Sequencing Tests
 // =============================================================================
 
-fn test_and_then_success() -> void {
+test "and then success" {
     let parser: fn(Input) -> ParseResult = and_then(
         char_p('a'),
         fn(a_val: Value) -> fn(Input) -> ParseResult {
@@ -28,30 +28,27 @@ fn test_and_then_success() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_and_then_first_fails() -> void {
+test "and then first fails" {
     let parser: fn(Input) -> ParseResult = and_then(
         char_p('x'),
         fn(_: Value) -> fn(Input) -> ParseResult { return char_p('y') }
     )
     let result: ParseResult = run(parser, "abc")
     assert(is_failure(result), "should fail when first parser fails")
-    return
 }
 
-fn test_and_then_second_fails() -> void {
+test "and then second fails" {
     let parser: fn(Input) -> ParseResult = and_then(
         char_p('a'),
         fn(_: Value) -> fn(Input) -> ParseResult { return char_p('x') }
     )
     let result: ParseResult = run(parser, "abc")
     assert(is_failure(result), "should fail when second parser fails")
-    return
 }
 
-fn test_seq_left_keeps_left() -> void {
+test "seq left keeps left" {
     let parser: fn(Input) -> ParseResult = seq_left(char_p('a'), char_p('b'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -63,10 +60,9 @@ fn test_seq_left_keeps_left() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_seq_right_keeps_right() -> void {
+test "seq right keeps right" {
     let parser: fn(Input) -> ParseResult = seq_right(char_p('a'), char_p('b'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -78,10 +74,9 @@ fn test_seq_right_keeps_right() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_seq_pair_keeps_both() -> void {
+test "seq pair keeps both" {
     let parser: fn(Input) -> ParseResult = seq_pair(char_p('a'), char_p('b'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -98,10 +93,9 @@ fn test_seq_pair_keeps_both() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_between_extracts_middle() -> void {
+test "between extracts middle" {
     let parser: fn(Input) -> ParseResult = between(
         char_p('('),
         char_p('x'),
@@ -117,14 +111,13 @@ fn test_between_extracts_middle() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // Alternation Tests
 // =============================================================================
 
-fn test_or_else_first_succeeds() -> void {
+test "or else first succeeds" {
     let parser: fn(Input) -> ParseResult = or_else(char_p('a'), char_p('b'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -135,10 +128,9 @@ fn test_or_else_first_succeeds() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_or_else_second_succeeds() -> void {
+test "or else second succeeds" {
     let parser: fn(Input) -> ParseResult = or_else(char_p('x'), char_p('a'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -149,10 +141,9 @@ fn test_or_else_second_succeeds() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_or_else_both_fail_merges_errors() -> void {
+test "or else both fail merges errors" {
     let parser: fn(Input) -> ParseResult = or_else(char_p('x'), char_p('y'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -163,18 +154,16 @@ fn test_or_else_both_fail_merges_errors() -> void {
             assert(std.list.length(e.expected) == 2, "should merge expected lists")
         }
     }
-    return
 }
 
-fn test_choice_empty_list() -> void {
+test "choice empty list" {
     let parsers: List[fn(Input) -> ParseResult] = Nil
     let parser: fn(Input) -> ParseResult = choice(parsers)
     let result: ParseResult = run(parser, "abc")
     assert(is_failure(result), "choice of empty list should fail")
-    return
 }
 
-fn test_choice_first_match() -> void {
+test "choice first match" {
     let parsers: List[fn(Input) -> ParseResult] = Cons(char_p('a'), Cons(char_p('b'), Cons(char_p('c'), Nil)))
     let parser: fn(Input) -> ParseResult = choice(parsers)
     let result: ParseResult = run(parser, "abc")
@@ -186,10 +175,9 @@ fn test_choice_first_match() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_choice_later_match() -> void {
+test "choice later match" {
     let parsers: List[fn(Input) -> ParseResult] = Cons(char_p('x'), Cons(char_p('y'), Cons(char_p('a'), Nil)))
     let parser: fn(Input) -> ParseResult = choice(parsers)
     let result: ParseResult = run(parser, "abc")
@@ -201,10 +189,9 @@ fn test_choice_later_match() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_optional_present() -> void {
+test "optional present" {
     let parser: fn(Input) -> ParseResult = optional(char_p('a'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -218,10 +205,9 @@ fn test_optional_present() -> void {
             assert(false, "optional should never fail")
         }
     }
-    return
 }
 
-fn test_optional_absent() -> void {
+test "optional absent" {
     let parser: fn(Input) -> ParseResult = optional(char_p('x'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -235,14 +221,13 @@ fn test_optional_absent() -> void {
             assert(false, "optional should never fail")
         }
     }
-    return
 }
 
 // =============================================================================
 // Transformation Tests
 // =============================================================================
 
-fn test_map_p_transforms_value() -> void {
+test "map p transforms value" {
     let parser: fn(Input) -> ParseResult = map_p(digit(), fn(v: Value) -> Value {
         let c: char = unwrap_char(v)
         return VString("digit:" + to_string(c))
@@ -256,10 +241,9 @@ fn test_map_p_transforms_value() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_map2_combines_two() -> void {
+test "map2 combines two" {
     let parser: fn(Input) -> ParseResult = map2(
         char_p('a'),
         char_p('b'),
@@ -276,10 +260,9 @@ fn test_map2_combines_two() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_map3_combines_three() -> void {
+test "map3 combines three" {
     let parser: fn(Input) -> ParseResult = map3(
         char_p('a'),
         char_p('b'),
@@ -297,10 +280,9 @@ fn test_map3_combines_three() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_replace_p_replaces_value() -> void {
+test "replace p replaces value" {
     let parser: fn(Input) -> ParseResult = replace_p(char_p('x'), VInt(42i64))
     let result: ParseResult = run(parser, "xyz")
     match result {
@@ -311,14 +293,13 @@ fn test_replace_p_replaces_value() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // Repetition Tests
 // =============================================================================
 
-fn test_many_zero_matches() -> void {
+test "many zero matches" {
     let parser: fn(Input) -> ParseResult = many(digit())
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -330,10 +311,9 @@ fn test_many_zero_matches() -> void {
             assert(false, "many should never fail")
         }
     }
-    return
 }
 
-fn test_many_multiple_matches() -> void {
+test "many multiple matches" {
     let parser: fn(Input) -> ParseResult = many(digit())
     let result: ParseResult = run(parser, "123abc")
     match result {
@@ -345,10 +325,9 @@ fn test_many_multiple_matches() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_many1_requires_one() -> void {
+test "many1 requires one" {
     let parser: fn(Input) -> ParseResult = many1(digit())
     let result: ParseResult = run(parser, "123abc")
     match result {
@@ -359,17 +338,15 @@ fn test_many1_requires_one() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_many1_empty_fails() -> void {
+test "many1 empty fails" {
     let parser: fn(Input) -> ParseResult = many1(digit())
     let result: ParseResult = run(parser, "abc")
     assert(is_failure(result), "many1 should fail with zero matches")
-    return
 }
 
-fn test_count_p_exact() -> void {
+test "count p exact" {
     let parser: fn(Input) -> ParseResult = count_p(3, letter())
     let result: ParseResult = run(parser, "abcdef")
     match result {
@@ -381,17 +358,15 @@ fn test_count_p_exact() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_count_p_not_enough() -> void {
+test "count p not enough" {
     let parser: fn(Input) -> ParseResult = count_p(5, letter())
     let result: ParseResult = run(parser, "abc")
     assert(is_failure(result), "count should fail if not enough")
-    return
 }
 
-fn test_sep_by_empty() -> void {
+test "sep by empty" {
     let parser: fn(Input) -> ParseResult = sep_by(digit(), char_p(','))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -403,10 +378,9 @@ fn test_sep_by_empty() -> void {
             assert(false, "sep_by should never fail")
         }
     }
-    return
 }
 
-fn test_sep_by_one_item() -> void {
+test "sep by one item" {
     let parser: fn(Input) -> ParseResult = sep_by(digit(), char_p(','))
     let result: ParseResult = run(parser, "5abc")
     match result {
@@ -417,10 +391,9 @@ fn test_sep_by_one_item() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_sep_by_multiple_items() -> void {
+test "sep by multiple items" {
     let parser: fn(Input) -> ParseResult = sep_by(digit(), char_p(','))
     let result: ParseResult = run(parser, "1,2,3abc")
     match result {
@@ -432,17 +405,15 @@ fn test_sep_by_multiple_items() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_sep_by1_requires_one() -> void {
+test "sep by1 requires one" {
     let parser: fn(Input) -> ParseResult = sep_by1(digit(), char_p(','))
     let result: ParseResult = run(parser, "abc")
     assert(is_failure(result), "sep_by1 should fail with zero items")
-    return
 }
 
-fn test_end_by_with_trailing() -> void {
+test "end by with trailing" {
     let parser: fn(Input) -> ParseResult = end_by(digit(), char_p(';'))
     let result: ParseResult = run(parser, "1;2;3;abc")
     match result {
@@ -454,14 +425,13 @@ fn test_end_by_with_trailing() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // Lookahead Tests
 // =============================================================================
 
-fn test_lookahead_no_consume() -> void {
+test "lookahead no consume" {
     let parser: fn(Input) -> ParseResult = lookahead(char_p('a'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -473,17 +443,15 @@ fn test_lookahead_no_consume() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_lookahead_fails() -> void {
+test "lookahead fails" {
     let parser: fn(Input) -> ParseResult = lookahead(char_p('x'))
     let result: ParseResult = run(parser, "abc")
     assert(is_failure(result), "lookahead should fail if parser fails")
-    return
 }
 
-fn test_not_followed_by_success() -> void {
+test "not followed by success" {
     let parser: fn(Input) -> ParseResult = not_followed_by(char_p('x'))
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -494,17 +462,15 @@ fn test_not_followed_by_success() -> void {
             assert(false, "should succeed when parser fails")
         }
     }
-    return
 }
 
-fn test_not_followed_by_failure() -> void {
+test "not followed by failure" {
     let parser: fn(Input) -> ParseResult = not_followed_by(char_p('a'))
     let result: ParseResult = run(parser, "abc")
     assert(is_failure(result), "should fail when parser succeeds")
-    return
 }
 
-fn test_try_p_backtracks() -> void {
+test "try p backtracks" {
     let failing_parser: fn(Input) -> ParseResult = and_then(
         char_p('a'),
         fn(_: Value) -> fn(Input) -> ParseResult { return char_p('x') }
@@ -519,14 +485,13 @@ fn test_try_p_backtracks() -> void {
             assert(e.position.offset == 0, "error position should be reset to start")
         }
     }
-    return
 }
 
 // =============================================================================
 // Error Enhancement Tests
 // =============================================================================
 
-fn test_label_p_replaces_expected() -> void {
+test "label p replaces expected" {
     let parser: fn(Input) -> ParseResult = label_p(digit(), "number")
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -543,10 +508,9 @@ fn test_label_p_replaces_expected() -> void {
             }
         }
     }
-    return
 }
 
-fn test_context_p_adds_context() -> void {
+test "context p adds context" {
     let parser: fn(Input) -> ParseResult = context_p(digit(), "parsing age")
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -563,27 +527,25 @@ fn test_context_p_adds_context() -> void {
             }
         }
     }
-    return
 }
 
 // =============================================================================
 // Recursive Parser Tests
 // =============================================================================
 
-fn test_lazy_p_defers_construction() -> void {
+test "lazy p defers construction" {
     let parser: fn(Input) -> ParseResult = lazy_p(fn() -> fn(Input) -> ParseResult {
         return char_p('a')
     })
     let result: ParseResult = run(parser, "abc")
     assert(is_success(result), "should succeed")
-    return
 }
 
 // =============================================================================
 // Integration Tests
 // =============================================================================
 
-fn test_parse_comma_separated_digits() -> void {
+test "parse comma separated digits" {
     let parser: fn(Input) -> ParseResult = sep_by(digit(), char_p(','))
     let result: ParseResult = run(parser, "1,2,3")
     match result {
@@ -594,10 +556,9 @@ fn test_parse_comma_separated_digits() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_parse_key_value() -> void {
+test "parse key value" {
     // Parse key=value where both are letters
     let word: fn(Input) -> ParseResult = map_p(many1(letter()), fn(v: Value) -> Value {
         return VString(value_chars_to_string(v))
@@ -625,5 +586,4 @@ fn test_parse_key_value() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }

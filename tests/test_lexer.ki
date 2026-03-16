@@ -9,7 +9,7 @@ import src.lexer
 // Whitespace Tests
 // =============================================================================
 
-fn test_skip_ws_empty() -> void {
+test "skip ws empty" {
     let parser: fn(Input) -> ParseResult = skip_ws()
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -20,10 +20,9 @@ fn test_skip_ws_empty() -> void {
             assert(false, "skip_ws should never fail")
         }
     }
-    return
 }
 
-fn test_skip_ws_spaces() -> void {
+test "skip ws spaces" {
     let parser: fn(Input) -> ParseResult = skip_ws()
     let result: ParseResult = run(parser, "   abc")
     match result {
@@ -34,10 +33,9 @@ fn test_skip_ws_spaces() -> void {
             assert(false, "skip_ws should never fail")
         }
     }
-    return
 }
 
-fn test_skip_ws_mixed_whitespace() -> void {
+test "skip ws mixed whitespace" {
     let parser: fn(Input) -> ParseResult = skip_ws()
     let result: ParseResult = run(parser, " \t\n abc")
     match result {
@@ -48,10 +46,9 @@ fn test_skip_ws_mixed_whitespace() -> void {
             assert(false, "skip_ws should never fail")
         }
     }
-    return
 }
 
-fn test_lexeme_strips_trailing_ws() -> void {
+test "lexeme strips trailing ws" {
     let parser: fn(Input) -> ParseResult = lexeme(char_p('x'))
     let result: ParseResult = run(parser, "x   abc")
     match result {
@@ -63,14 +60,13 @@ fn test_lexeme_strips_trailing_ws() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // Keyword Tests
 // =============================================================================
 
-fn test_keyword_matches_word() -> void {
+test "keyword matches word" {
     let parser: fn(Input) -> ParseResult = keyword("if")
     let result: ParseResult = run(parser, "if (x)")
     match result {
@@ -81,17 +77,15 @@ fn test_keyword_matches_word() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_keyword_not_prefix() -> void {
+test "keyword not prefix" {
     let parser: fn(Input) -> ParseResult = keyword("if")
     let result: ParseResult = run(parser, "iffy")
     assert(is_failure(result), "should not match prefix of identifier")
-    return
 }
 
-fn test_keyword_with_trailing_ws() -> void {
+test "keyword with trailing ws" {
     let parser: fn(Input) -> ParseResult = keyword("while")
     let result: ParseResult = run(parser, "while   (")
     match result {
@@ -103,14 +97,13 @@ fn test_keyword_with_trailing_ws() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // Symbol Tests
 // =============================================================================
 
-fn test_symbol_matches() -> void {
+test "symbol matches" {
     let parser: fn(Input) -> ParseResult = symbol("+=")
     let result: ParseResult = run(parser, "+=  x")
     match result {
@@ -122,21 +115,19 @@ fn test_symbol_matches() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_symbol_no_match() -> void {
+test "symbol no match" {
     let parser: fn(Input) -> ParseResult = symbol("++")
     let result: ParseResult = run(parser, "+-")
     assert(is_failure(result), "should fail on different symbol")
-    return
 }
 
 // =============================================================================
 // Identifier Tests
 // =============================================================================
 
-fn test_identifier_simple() -> void {
+test "identifier simple" {
     let parser: fn(Input) -> ParseResult = identifier()
     let result: ParseResult = run(parser, "foo bar")
     match result {
@@ -147,10 +138,9 @@ fn test_identifier_simple() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_identifier_with_numbers() -> void {
+test "identifier with numbers" {
     let parser: fn(Input) -> ParseResult = identifier()
     let result: ParseResult = run(parser, "foo123 bar")
     match result {
@@ -161,17 +151,15 @@ fn test_identifier_with_numbers() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_identifier_leading_number_fails() -> void {
+test "identifier leading number fails" {
     let parser: fn(Input) -> ParseResult = identifier()
     let result: ParseResult = run(parser, "123foo")
     assert(is_failure(result), "identifier cannot start with digit")
-    return
 }
 
-fn test_identifier_single_letter() -> void {
+test "identifier single letter" {
     let parser: fn(Input) -> ParseResult = identifier()
     let result: ParseResult = run(parser, "x ")
     match result {
@@ -182,14 +170,13 @@ fn test_identifier_single_letter() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // Integer Tests
 // =============================================================================
 
-fn test_integer_positive() -> void {
+test "integer positive" {
     let parser: fn(Input) -> ParseResult = integer()
     let result: ParseResult = run(parser, "42 ")
     match result {
@@ -200,10 +187,9 @@ fn test_integer_positive() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_integer_multidigit() -> void {
+test "integer multidigit" {
     let parser: fn(Input) -> ParseResult = integer()
     let result: ParseResult = run(parser, "123456 ")
     match result {
@@ -214,17 +200,15 @@ fn test_integer_multidigit() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_integer_fails_on_letter() -> void {
+test "integer fails on letter" {
     let parser: fn(Input) -> ParseResult = integer()
     let result: ParseResult = run(parser, "abc")
     assert(is_failure(result), "should fail on non-digit")
-    return
 }
 
-fn test_signed_integer_negative() -> void {
+test "signed integer negative" {
     let parser: fn(Input) -> ParseResult = signed_integer()
     let result: ParseResult = run(parser, "-42 ")
     match result {
@@ -235,10 +219,9 @@ fn test_signed_integer_negative() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_signed_integer_positive_explicit() -> void {
+test "signed integer positive explicit" {
     let parser: fn(Input) -> ParseResult = signed_integer()
     let result: ParseResult = run(parser, "+42 ")
     match result {
@@ -249,14 +232,13 @@ fn test_signed_integer_positive_explicit() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // String Literal Tests
 // =============================================================================
 
-fn test_string_literal_simple() -> void {
+test "string literal simple" {
     let parser: fn(Input) -> ParseResult = string_literal()
     let result: ParseResult = run(parser, "\"hello\" ")
     match result {
@@ -267,10 +249,9 @@ fn test_string_literal_simple() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_string_literal_escaped_chars() -> void {
+test "string literal escaped chars" {
     let parser: fn(Input) -> ParseResult = string_literal()
     let result: ParseResult = run(parser, "\"hello\\nworld\" ")
     match result {
@@ -281,10 +262,9 @@ fn test_string_literal_escaped_chars() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_string_literal_escaped_quote() -> void {
+test "string literal escaped quote" {
     let parser: fn(Input) -> ParseResult = string_literal()
     let result: ParseResult = run(parser, "\"say \\\"hi\\\"\" ")
     match result {
@@ -295,10 +275,9 @@ fn test_string_literal_escaped_quote() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_string_literal_empty() -> void {
+test "string literal empty" {
     let parser: fn(Input) -> ParseResult = string_literal()
     let result: ParseResult = run(parser, "\"\" ")
     match result {
@@ -309,21 +288,19 @@ fn test_string_literal_empty() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_string_literal_unclosed() -> void {
+test "string literal unclosed" {
     let parser: fn(Input) -> ParseResult = string_literal()
     let result: ParseResult = run(parser, "\"hello")
     assert(is_failure(result), "should fail on unclosed string")
-    return
 }
 
 // =============================================================================
 // Utility Tests
 // =============================================================================
 
-fn test_parens() -> void {
+test "parens" {
     let parser: fn(Input) -> ParseResult = parens(integer())
     let result: ParseResult = run(parser, "( 42 ) ")
     match result {
@@ -334,10 +311,9 @@ fn test_parens() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_brackets() -> void {
+test "brackets" {
     let parser: fn(Input) -> ParseResult = brackets(integer())
     let result: ParseResult = run(parser, "[ 42 ] ")
     match result {
@@ -348,10 +324,9 @@ fn test_brackets() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_braces() -> void {
+test "braces" {
     let parser: fn(Input) -> ParseResult = braces(integer())
     let result: ParseResult = run(parser, "{ 42 } ")
     match result {
@@ -362,10 +337,9 @@ fn test_braces() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_comma_sep() -> void {
+test "comma sep" {
     let parser: fn(Input) -> ParseResult = comma_sep(integer())
     let result: ParseResult = run(parser, "1, 2, 3 ")
     match result {
@@ -376,10 +350,9 @@ fn test_comma_sep() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_comma_sep_empty() -> void {
+test "comma sep empty" {
     let parser: fn(Input) -> ParseResult = comma_sep(integer())
     let result: ParseResult = run(parser, "abc")
     match result {
@@ -390,10 +363,9 @@ fn test_comma_sep_empty() -> void {
             assert(false, "comma_sep should never fail")
         }
     }
-    return
 }
 
-fn test_line_comment() -> void {
+test "line comment" {
     let parser: fn(Input) -> ParseResult = line_comment("//")
     let result: ParseResult = run(parser, "// this is a comment\nnext line")
     match result {
@@ -404,14 +376,13 @@ fn test_line_comment() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // Integration Tests
 // =============================================================================
 
-fn test_parse_assignment() -> void {
+test "parse assignment" {
     // Parse: identifier = integer ;
     let parser: fn(Input) -> ParseResult = map3(
         identifier(),
@@ -436,10 +407,9 @@ fn test_parse_assignment() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_parse_function_call() -> void {
+test "parse function call" {
     // Parse: identifier ( args )
     let args: fn(Input) -> ParseResult = parens(comma_sep(integer()))
     let parser: fn(Input) -> ParseResult = seq_pair(identifier(), args)
@@ -458,5 +428,4 @@ fn test_parse_function_call() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }

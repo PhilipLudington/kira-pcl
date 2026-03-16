@@ -10,7 +10,7 @@ import src.expr
 // Chain Combinator Tests
 // =============================================================================
 
-fn test_chainl1_op_single_term() -> void {
+test "chainl1 op single term" {
     let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
         return VInt(unwrap_int(a) + unwrap_int(b))
     })
@@ -24,10 +24,9 @@ fn test_chainl1_op_single_term() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_chainl1_op_two_terms() -> void {
+test "chainl1 op two terms" {
     let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
         return VInt(unwrap_int(a) + unwrap_int(b))
     })
@@ -41,10 +40,9 @@ fn test_chainl1_op_two_terms() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_chainl1_op_left_associative() -> void {
+test "chainl1 op left associative" {
     // Test: 10 - 3 - 2 should be ((10 - 3) - 2) = 5
     let sub_op: Operator = infixl_op(symbol("-"), fn(a: Value, b: Value) -> Value {
         return VInt(unwrap_int(a) - unwrap_int(b))
@@ -59,10 +57,9 @@ fn test_chainl1_op_left_associative() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_chainr1_op_right_associative() -> void {
+test "chainr1 op right associative" {
     // Test: 10 - 3 - 2 = 10 - (3 - 2) = 10 - 1 = 9
     let sub_op: Operator = infixr_op(symbol("-"), fn(a: Value, b: Value) -> Value {
         return VInt(unwrap_int(a) - unwrap_int(b))
@@ -77,10 +74,9 @@ fn test_chainr1_op_right_associative() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_chainl1_op_multiple_ops() -> void {
+test "chainl1 op multiple ops" {
     let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
         return VInt(unwrap_int(a) + unwrap_int(b))
     })
@@ -97,14 +93,13 @@ fn test_chainl1_op_multiple_ops() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // Expression Parser Builder Tests
 // =============================================================================
 
-fn test_add_operators_single_level() -> void {
+test "add operators single level" {
     let mul_op: Operator = infixl_op(symbol("*"), fn(a: Value, b: Value) -> Value {
         return VInt(unwrap_int(a) * unwrap_int(b))
     })
@@ -118,10 +113,9 @@ fn test_add_operators_single_level() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_build_expr_parser_precedence() -> void {
+test "build expr parser precedence" {
     let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
         return VInt(unwrap_int(a) + unwrap_int(b))
     })
@@ -151,10 +145,9 @@ fn test_build_expr_parser_precedence() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_build_expr_parser_associativity() -> void {
+test "build expr parser associativity" {
     let sub_op: Operator = infixl_op(symbol("-"), fn(a: Value, b: Value) -> Value {
         return VInt(unwrap_int(a) - unwrap_int(b))
     })
@@ -172,10 +165,9 @@ fn test_build_expr_parser_associativity() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
-fn test_non_assoc_operator() -> void {
+test "non assoc operator" {
     let eq_op: Operator = infix_none_op(symbol("=="), fn(a: Value, b: Value) -> Value {
         if unwrap_int(a) == unwrap_int(b) {
             return VBool(true)
@@ -196,14 +188,13 @@ fn test_non_assoc_operator() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }
 
 // =============================================================================
 // Complex Expression Tests
 // =============================================================================
 
-fn test_complex_expression() -> void {
+test "complex expression" {
     let add_op: Operator = infixl_op(symbol("+"), fn(a: Value, b: Value) -> Value {
         return VInt(unwrap_int(a) + unwrap_int(b))
     })
@@ -233,5 +224,4 @@ fn test_complex_expression() -> void {
             assert(false, "should succeed")
         }
     }
-    return
 }

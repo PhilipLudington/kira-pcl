@@ -184,7 +184,7 @@ pub fn remaining_from(s: string, offset: i32) -> string {
     if offset <= 0 {
         return s
     }
-    let len: i32 = std.string.length(s)
+    let len: i64 = std.string.length(s)
     if offset >= len {
         return ""
     }
@@ -211,7 +211,7 @@ pub fn starts_with(s: string, prefix: string) -> bool {
 
 pub fn string_contains_char(s: string, c: char) -> bool {
     var i: i32 = 0
-    let len: i32 = std.string.length(s)
+    let len: i64 = std.string.length(s)
     loop {
         if i >= len {
             return false
@@ -275,7 +275,7 @@ pub fn advance_position(pos: Position, c: char) -> Position {
 pub fn advance_position_by_string(pos: Position, s: string) -> Position {
     var current: Position = pos
     var i: i32 = 0
-    let len: i32 = std.string.length(s)
+    let len: i64 = std.string.length(s)
     loop {
         if i >= len {
             return current

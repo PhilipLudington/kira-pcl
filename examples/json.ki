@@ -164,7 +164,7 @@ pub fn json_index(arr: Value, index: i32) -> Option[Value] {
 fn escape_json_string(s: string) -> string {
     var result: string = ""
     var i: i32 = 0
-    let len: i32 = std.string.length(s)
+    let len: i64 = std.string.length(s)
     loop {
         if i >= len {
             return result

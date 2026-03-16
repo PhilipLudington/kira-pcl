@@ -10,12 +10,12 @@ import examples.json
 // Null Tests
 // =============================================================================
 
-fn test_parse_null() -> void {
+test "parse null" {
     let result: Result[Value, ParseError] = parse_json("null")
     match result {
         Ok(v) => {
             match v {
-                VVoid => { return }
+                VVoid => { }
                 _ => { assert(false, "expected VVoid for null") }
             }
         }
@@ -23,12 +23,12 @@ fn test_parse_null() -> void {
     }
 }
 
-fn test_parse_null_with_whitespace() -> void {
+test "parse null with whitespace" {
     let result: Result[Value, ParseError] = parse_json("  null  ")
     match result {
         Ok(v) => {
             match v {
-                VVoid => { return }
+                VVoid => { }
                 _ => { assert(false, "expected VVoid for null") }
             }
         }
@@ -40,7 +40,7 @@ fn test_parse_null_with_whitespace() -> void {
 // Boolean Tests
 // =============================================================================
 
-fn test_parse_true() -> void {
+test "parse true" {
     let result: Result[Value, ParseError] = parse_json("true")
     match result {
         Ok(v) => {
@@ -53,7 +53,7 @@ fn test_parse_true() -> void {
     }
 }
 
-fn test_parse_false() -> void {
+test "parse false" {
     let result: Result[Value, ParseError] = parse_json("false")
     match result {
         Ok(v) => {
@@ -70,7 +70,7 @@ fn test_parse_false() -> void {
 // Number Tests
 // =============================================================================
 
-fn test_parse_integer() -> void {
+test "parse integer" {
     let result: Result[Value, ParseError] = parse_json("42")
     match result {
         Ok(v) => {
@@ -84,7 +84,7 @@ fn test_parse_integer() -> void {
     }
 }
 
-fn test_parse_float() -> void {
+test "parse float" {
     let result: Result[Value, ParseError] = parse_json("3.14")
     match result {
         Ok(v) => {
@@ -97,7 +97,7 @@ fn test_parse_float() -> void {
     }
 }
 
-fn test_parse_zero() -> void {
+test "parse zero" {
     let result: Result[Value, ParseError] = parse_json("0")
     match result {
         Ok(v) => {
@@ -115,7 +115,7 @@ fn test_parse_zero() -> void {
 // String Tests
 // =============================================================================
 
-fn test_parse_string_simple() -> void {
+test "parse string simple" {
     let result: Result[Value, ParseError] = parse_json("\"hello\"")
     match result {
         Ok(v) => {
@@ -128,7 +128,7 @@ fn test_parse_string_simple() -> void {
     }
 }
 
-fn test_parse_string_escaped() -> void {
+test "parse string escaped" {
     let result: Result[Value, ParseError] = parse_json("\"hello\\nworld\"")
     match result {
         Ok(v) => {
@@ -141,7 +141,7 @@ fn test_parse_string_escaped() -> void {
     }
 }
 
-fn test_parse_string_empty() -> void {
+test "parse string empty" {
     let result: Result[Value, ParseError] = parse_json("\"\"")
     match result {
         Ok(v) => {
@@ -158,7 +158,7 @@ fn test_parse_string_empty() -> void {
 // Array Tests
 // =============================================================================
 
-fn test_parse_empty_array() -> void {
+test "parse empty array" {
     let result: Result[Value, ParseError] = parse_json("[]")
     match result {
         Ok(v) => {
@@ -171,7 +171,7 @@ fn test_parse_empty_array() -> void {
     }
 }
 
-fn test_parse_array_one_element() -> void {
+test "parse array one element" {
     let result: Result[Value, ParseError] = parse_json("[1]")
     match result {
         Ok(v) => {
@@ -184,7 +184,7 @@ fn test_parse_array_one_element() -> void {
     }
 }
 
-fn test_parse_array_multiple() -> void {
+test "parse array multiple" {
     let result: Result[Value, ParseError] = parse_json("[1, 2, 3]")
     match result {
         Ok(v) => {
@@ -197,7 +197,7 @@ fn test_parse_array_multiple() -> void {
     }
 }
 
-fn test_parse_nested_array() -> void {
+test "parse nested array" {
     let result: Result[Value, ParseError] = parse_json("[[1, 2], [3, 4]]")
     match result {
         Ok(v) => {
@@ -210,7 +210,7 @@ fn test_parse_nested_array() -> void {
     }
 }
 
-fn test_parse_mixed_array() -> void {
+test "parse mixed array" {
     let result: Result[Value, ParseError] = parse_json("[1, \"hello\", true, null]")
     match result {
         Ok(v) => {
@@ -227,7 +227,7 @@ fn test_parse_mixed_array() -> void {
 // Object Tests
 // =============================================================================
 
-fn test_parse_empty_object() -> void {
+test "parse empty object" {
     let result: Result[Value, ParseError] = parse_json("{}")
     match result {
         Ok(v) => {
@@ -240,7 +240,7 @@ fn test_parse_empty_object() -> void {
     }
 }
 
-fn test_parse_object_one_pair() -> void {
+test "parse object one pair" {
     let result: Result[Value, ParseError] = parse_json("{\"name\": \"Alice\"}")
     match result {
         Ok(v) => {
@@ -253,7 +253,7 @@ fn test_parse_object_one_pair() -> void {
     }
 }
 
-fn test_parse_object_multiple() -> void {
+test "parse object multiple" {
     let result: Result[Value, ParseError] = parse_json("{\"name\": \"Alice\", \"age\": 30}")
     match result {
         Ok(v) => {
@@ -266,12 +266,12 @@ fn test_parse_object_multiple() -> void {
     }
 }
 
-fn test_parse_nested_object() -> void {
+test "parse nested object" {
     let result: Result[Value, ParseError] = parse_json("{\"person\": {\"name\": \"Alice\"}}")
     match result {
         Ok(v) => {
             match v {
-                VList(_) => { return }
+                VList(_) => { }
                 _ => { assert(false, "expected VList") }
             }
         }
@@ -283,13 +283,13 @@ fn test_parse_nested_object() -> void {
 // Complex JSON Tests
 // =============================================================================
 
-fn test_parse_complex_json() -> void {
+test "parse complex json" {
     let input: string = "{\"users\": [{\"name\": \"Alice\", \"active\": true}, {\"name\": \"Bob\", \"active\": false}]}"
     let result: Result[Value, ParseError] = parse_json(input)
     match result {
         Ok(v) => {
             match v {
-                VList(_) => { return }
+                VList(_) => { }
                 _ => { assert(false, "expected VList") }
             }
         }
@@ -297,13 +297,13 @@ fn test_parse_complex_json() -> void {
     }
 }
 
-fn test_parse_whitespace_handling() -> void {
+test "parse whitespace handling" {
     let input: string = "  {  \"key\"  :  \"value\"  }  "
     let result: Result[Value, ParseError] = parse_json(input)
     match result {
         Ok(v) => {
             match v {
-                VList(_) => { return }
+                VList(_) => { }
                 _ => { assert(false, "expected VList") }
             }
         }
@@ -315,27 +315,27 @@ fn test_parse_whitespace_handling() -> void {
 // Error Tests
 // =============================================================================
 
-fn test_parse_error_unclosed_array() -> void {
+test "parse error unclosed array" {
     let result: Result[Value, ParseError] = parse_json("[1, 2, 3")
     match result {
         Ok(_) => { assert(false, "should fail on unclosed array") }
-        Err(_) => { return }
+        Err(_) => { }
     }
 }
 
-fn test_parse_error_unclosed_object() -> void {
+test "parse error unclosed object" {
     let result: Result[Value, ParseError] = parse_json("{\"key\": \"value\"")
     match result {
         Ok(_) => { assert(false, "should fail on unclosed object") }
-        Err(_) => { return }
+        Err(_) => { }
     }
 }
 
-fn test_parse_error_invalid_value() -> void {
+test "parse error invalid value" {
     let result: Result[Value, ParseError] = parse_json("undefined")
     match result {
         Ok(_) => { assert(false, "should fail on invalid value") }
-        Err(_) => { return }
+        Err(_) => { }
     }
 }
 
@@ -343,7 +343,7 @@ fn test_parse_error_invalid_value() -> void {
 // Accessor Tests
 // =============================================================================
 
-fn test_json_get() -> void {
+test "json get" {
     let result: Result[Value, ParseError] = parse_json("{\"name\": \"Alice\"}")
     match result {
         Ok(obj) => {
@@ -359,23 +359,22 @@ fn test_json_get() -> void {
         }
         Err(_) => { assert(false, "should parse") }
     }
-    return
 }
 
-fn test_json_get_missing() -> void {
+test "json get missing" {
     let result: Result[Value, ParseError] = parse_json("{\"name\": \"Alice\"}")
     match result {
         Ok(obj) => {
             match json_get(obj, "age") {
                 Some(_) => { assert(false, "key should not exist") }
-                None => { return }
+                None => { }
             }
         }
         Err(_) => { assert(false, "should parse") }
     }
 }
 
-fn test_json_index() -> void {
+test "json index" {
     let result: Result[Value, ParseError] = parse_json("[10, 20, 30]")
     match result {
         Ok(arr) => {
@@ -392,23 +391,20 @@ fn test_json_index() -> void {
         }
         Err(_) => { assert(false, "should parse") }
     }
-    return
 }
 
 // =============================================================================
 // Round-trip Tests
 // =============================================================================
 
-fn test_json_to_string_null() -> void {
+test "json to string null" {
     let s: string = json_to_string(VVoid)
     assert(s == "null", "expected 'null'")
-    return
 }
 
-fn test_json_to_string_bool() -> void {
+test "json to string bool" {
     let s1: string = json_to_string(VBool(true))
     assert(s1 == "true", "expected 'true'")
     let s2: string = json_to_string(VBool(false))
     assert(s2 == "false", "expected 'false'")
-    return
 }
